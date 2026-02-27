@@ -1,31 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeAll } from 'vitest';
 import pino from 'pino';
 
-vi.mock('pino', async () => {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
-  const actual = await vi.importActual<typeof import('pino')>('pino');
-
-  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
-  const realPino = actual as unknown as typeof import('pino');
-
-  const mock = vi.fn((...args: Parameters<typeof realPino>) => {
-    return realPino(...args);
-  });
-
-  return {
-    __esModule: true,
-    default: mock,
-    ...actual,
-  };
+beforeAll(() => {
+  vi.spyOn(pino, 'transport').mockReturnValue(
+    pino.destination('/dev/null') as ReturnType<typeof pino.transport>,
+  );
 });
 
-// Intercept pino.transport so pino-roll is never loaded
-vi.spyOn(pino, 'transport').mockReturnValue(
-  pino.destination('/dev/null') as ReturnType<typeof pino.transport>,
-);
-
-import { createLogger } from '../../src/logger/logger';
-import { createContextLogger } from '../../src/logger/factory';
+import { createLogger } from '../../src/logger/logger.js';
+import { createContextLogger } from '../../src/logger/factory.js';
 
 describe('createLogger', () => {
   it('returns all three channels', () => {
@@ -138,21 +121,18 @@ describe('createContextLogger', () => {
 });
 
 describe('channel field', () => {
-  it('pino instance has correct base.channel', () => {
+  it('app channel has channel=app in bindings', () => {
     const logger = createLogger({ pretty: true });
-    const bindings = logger.app.pino.bindings();
-    expect(bindings['channel']).toBe('app');
+    expect(logger.app.pino.bindings()['channel']).toBe('app');
   });
 
   it('http channel has channel=http', () => {
     const logger = createLogger({ pretty: true });
-    const bindings = logger.http.pino.bindings();
-    expect(bindings['channel']).toBe('http');
+    expect(logger.http.pino.bindings()['channel']).toBe('http');
   });
 
   it('error channel has channel=error', () => {
     const logger = createLogger({ pretty: true });
-    const bindings = logger.error.pino.bindings();
-    expect(bindings['channel']).toBe('error');
+    expect(logger.error.pino.bindings()['channel']).toBe('error');
   });
 });
