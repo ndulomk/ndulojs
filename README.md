@@ -1,35 +1,178 @@
 # NduloJS
 
-> A TypeScript backend framework that enforces good architecture from day one.
+An opinionated TypeScript backend framework built on [Elysia](https://elysiajs.com).
 
-Built for developers who are learning — NduloJS gives you Clean Architecture, functional patterns, and dependency injection **by default**, not as an afterthought.
+NduloJS enforces Clean Architecture structurally — dependency injection, explicit error handling, and layered modules — so your codebase stays consistent as it grows.
 
-## Philosophy
+---
 
-- **Functional first** — everything is a function. OOP is possible, not required.
-- **Result pattern** — no more uncontrolled try/catch. Errors are values.
-- **Structured by design** — the CLI generates the right structure so you can't do it wrong.
-- **Learn by doing** — use the framework and absorb the architecture.
+## Features
 
-## Stack
+- **Result pattern** — no try/catch. Errors are typed values: `Result<T, AppError>`
+- **DI container** — functional, type-safe, zero decorators
+- **HTTP adapter** — Elysia under the hood, abstracted behind a clean interface
+- **Structured logger** — three channels (app, http, error) with daily rotation
+- **CLI** — scaffold modules, submodules, and full projects in seconds
 
-- Runtime: [Bun](https://bun.sh)
-- HTTP: [Elysia](https://elysiajs.com) (abstracted)
-- Validation: [Zod](https://zod.dev)
-- Language: TypeScript (strict)
+---
 
-## Quick Start
+## Install
 
 ```bash
-# Coming soon
+# New project
 npx ndulojs create my-app
-cd my-app
-bun dev
+cd my-app && bun install && bun dev
+
+# Existing project
+bun add @ndulojs/core
 ```
 
-## Status
+---
 
-🚧 Under active development — `v0.1.0` coming soon.
+## Quick start
+
+```ts
+import { createApp, createContainer, Ok, Err, ErrorFactory } from '@ndulojs/core';
+
+const app = await createApp({ port: 3000 });
+
+app.get('/health', () => Ok({ status: 'ok' }));
+
+app.listen(3000);
+```
+
+---
+
+## Result pattern
+
+Handlers return `Ok(value)` or `Err(error)`. The framework maps errors to HTTP status codes automatically — no middleware needed.
+
+```ts
+app.get('/users/:id', async ({ params }) => {
+  const user = await db.findById(params.id);
+  if (!user) return Err(ErrorFactory.notFound('User not found', 'User', params.id));
+  return Ok(user);
+});
+```
+
+| Error type | Status |
+|---|---|
+| `notFound` | 404 |
+| `unauthorized` | 401 |
+| `forbidden` | 403 |
+| `validation` | 422 |
+| `conflict` | 409 |
+| `business` | 400 |
+| `database` | 500 |
+| `externalService` | 502 |
+| `tooManyRequests` | 429 |
+
+---
+
+## Dependency injection
+
+```ts
+import { createContainer } from '@ndulojs/core';
+
+const container = createContainer()
+  .register('Config',         ()  => loadConfig())
+  .register('Database',       (c) => createDatabase(c.resolve('Config')))
+  .register('UserRepository', (c) => createUserRepository(c.resolve('Database')))
+  .register('UserService',    (c) => createUserService(c.resolve('UserRepository')));
+
+const userService = container.resolve('UserService');
+```
+
+- Singleton by default
+- Scoped and transient scopes available
+- Circular dependency detection with a clear error message
+
+---
+
+## CLI
+
+```bash
+# New project
+npx ndulojs create my-app
+
+# Generate a module
+ndulo generate module farms
+
+# Generate a submodule
+ndulo generate module farms --sub members
+
+# Add a single file to an existing module
+ndulo add controller farms
+ndulo add service farms
+```
+
+`generate module` creates the full Clean Architecture structure:
+
+```
+src/modules/farms/
+├── events/farm.events.ts
+├── application/
+│   ├── dtos/farm.dto.ts
+│   ├── ports/farm.port.ts
+│   └── services/farm.service.ts
+└── infrastructure/
+    ├── persistence/farm.repository.ts
+    └── http/controllers/farm.controller.ts
+```
+
+---
+
+## Logger
+
+```ts
+import { createLogger } from '@ndulojs/core';
+
+const logger = createLogger({ pretty: true }); // dev
+const logger = createLogger({ dir: 'logs', retainDays: 30 }); // prod
+
+logger.app.info('Server started');
+logger.http.info({ method: 'GET', path: '/users', status: 200 }, 'Request');
+logger.error.error({ err }, 'Unhandled exception');
+
+// Per-request context
+const log = logger.context({ requestId, userId });
+log.app.info('Processing request');
+```
+
+---
+
+## Project structure
+
+```
+src/
+├── modules/
+│   └── {module}/
+│       ├── events/
+│       ├── application/
+│       │   ├── dtos/
+│       │   ├── ports/
+│       │   └── services/
+│       └── infrastructure/
+│           ├── persistence/
+│           └── http/controllers/
+└── index.ts
+```
+
+---
+
+## Documentation
+
+- [Result Pattern](./docs/result.md)
+- [Dependency Injection](./docs/container.md)
+- [CLI Reference](./docs/cli.md)
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+---
 
 ## License
 

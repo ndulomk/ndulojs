@@ -1,0 +1,19 @@
+{
+  "name": "ndulojs-starter-app",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev":   "bun --watch src/index.ts",
+    "start": "bun src/index.ts"
+  },
+  "dependencies": {
+    "@ndulojs/core":    "workspace:*",
+    "@node-rs/argon2":  "latest",
+    "jsonwebtoken":     "latest"
+  },
+  "devDependencies": {
+    "@types/bun":        "latest",
+    "@types/jsonwebtoken": "latest",
+    "typescript":        "latest"
+  }
+}
