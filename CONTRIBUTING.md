@@ -3,7 +3,7 @@
 ## Setup
 
 ```bash
-git clone https://github.com/your-org/ndulojs
+git clone https://github.com/ndulomk/ndulojs
 cd ndulojs
 bun install
 ```
