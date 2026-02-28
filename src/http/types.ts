@@ -108,7 +108,6 @@ export type SwaggerConfig = {
 /**
  * The core HTTP adapter interface.
  * All framework-specific code lives behind this contract.
- * Today it's Elysia — tomorrow it could be Fastify or Hono.
  */
 export interface IHttpAdapter {
   /**

@@ -64,13 +64,12 @@ export const create${n.pascal}Controller = (app: IHttpAdapter, service: I${n.pas
 
 export const moduleTemplate = (n: ModuleNames): GeneratedFile => ({
   path: `src/modules/${n.kebabPlural}/${n.kebab}.module.ts`,
-  content: `import type { Container } from '@ndulojs/core';
+  content: `import type { IHttpAdapter } from '@ndulojs/core';
 import { create${n.pascal}Repository } from './infrastructure/persistence/${n.kebab}.repository.js';
 import { create${n.pascal}Service } from './application/services/${n.kebab}.service.js';
 import { create${n.pascal}Controller } from './infrastructure/http/controllers/${n.kebab}.controller.js';
-import type { IHttpAdapter } from '@ndulojs/core';
 
-export const register${n.pascal}Module = (container: Container<any>, app: IHttpAdapter): void => {
+export const register${n.pascal}Module = (app: IHttpAdapter): void => {
   const repo = create${n.pascal}Repository();
   const service = create${n.pascal}Service(repo);
   create${n.pascal}Controller(app, service);
@@ -78,9 +77,6 @@ export const register${n.pascal}Module = (container: Container<any>, app: IHttpA
 `,
 });
 
-/**
- * All files generated for a full module.
- */
 export const moduleFiles = (n: ModuleNames): GeneratedFile[] => [
   eventsTemplate(n),
   dtoTemplate(n),
@@ -91,9 +87,6 @@ export const moduleFiles = (n: ModuleNames): GeneratedFile[] => [
   moduleTemplate(n),
 ];
 
-/**
- * Files generated for a submodule — nested under parent's folder, no events, no module entry.
- */
 export const submoduleFiles = (n: ModuleNames, parent: ModuleNames): GeneratedFile[] => {
   const nest = (f: GeneratedFile): GeneratedFile => ({
     ...f,
