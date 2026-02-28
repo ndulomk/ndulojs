@@ -1,9 +1,6 @@
-node_modules/
-dist/
-coverage/
+node_modules
+dist
+logs
 .env
-.env.local
-*.log
-logs/
-.DS_Store
-bun.lockb
+bun.lock
+*.tgz

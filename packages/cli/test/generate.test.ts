@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileExists } from '../../src/cli/utils/fs.js';
-import { moduleFiles, submoduleFiles } from '../../src/cli/templates/module.js';
-import { createFiles } from '../../src/cli/utils/fs.js';
-import { deriveNames } from '../../src/cli/utils/pluralize.js';
+import { fileExists } from '../src/utils/fs.js';
+import { moduleFiles, submoduleFiles } from '../src/templates/module.js';
+import { createFiles } from '../src/utils/fs.js';
+import { deriveNames } from '../src/utils/pluralize.js';
 
 let tmp: string;
 let originalCwd: string;

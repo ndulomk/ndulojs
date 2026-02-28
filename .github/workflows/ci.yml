@@ -8,7 +8,7 @@ on:
 
 jobs:
   ci:
-    name: Typecheck, Lint & Test
+    name: Build, Typecheck, Lint & Test
     runs-on: ubuntu-latest
 
     steps:
@@ -23,6 +23,9 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Build
+        run: bun run build
+
       - name: Typecheck
         run: bun run typecheck
 
@@ -32,13 +35,24 @@ jobs:
       - name: Format check
         run: bun run format:check
 
-      - name: Tests
-        run: bun run test:coverage
+      - name: Test (core)
+        run: bun run --filter '@ndulojs/core' test:coverage
 
-      - name: Upload coverage
+      - name: Test (cli)
+        run: bun run --filter '@ndulojs/cli' test:coverage
+
+      - name: Upload coverage (core)
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: coverage-report
-          path: coverage/
+          name: coverage-core
+          path: packages/core/coverage/
+          retention-days: 7
+
+      - name: Upload coverage (cli)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-cli
+          path: packages/cli/coverage/
           retention-days: 7

@@ -5,7 +5,7 @@ import {
   toCamelCase,
   toKebabCase,
   deriveNames,
-} from '../../src/cli/utils/pluralize.js';
+} from '../src/utils/pluralize.js';
 
 describe('toSingular', () => {
   it.each([

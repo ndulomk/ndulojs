@@ -8,7 +8,7 @@ import {
   fileExists,
   dirExists,
   FileExistsError,
-} from '../../src/cli/utils/fs.js';
+} from '../src/utils/fs.js';
 
 let tmp: string;
 

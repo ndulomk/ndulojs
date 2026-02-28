@@ -5,38 +5,77 @@ module.exports = {
   parserOptions: {
     ecmaVersion: 'latest',
     sourceType: 'module',
-    tsconfigRootDir: __dirname,
-    project: './tsconfig.eslint.json',
   },
   plugins: ['@typescript-eslint', 'prettier'],
   extends: [
     'eslint:recommended',
     'plugin:@typescript-eslint/recommended',
-    'plugin:@typescript-eslint/recommended-requiring-type-checking',
     'prettier',
     'plugin:prettier/recommended',
   ],
   rules: {
     'prettier/prettier': 'error',
-    '@typescript-eslint/explicit-function-return-type': 'warn',
     '@typescript-eslint/no-explicit-any': 'error',
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-    '@typescript-eslint/no-non-null-assertion': 'error',
     '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports' }],
-    '@typescript-eslint/no-floating-promises': 'error',
-    '@typescript-eslint/await-thenable': 'error',
-    '@typescript-eslint/no-misused-promises': 'error',
     'no-var': 'error',
     'prefer-const': 'error',
     'no-param-reassign': 'error',
-    'no-throw-literal': 'error',
     'no-console': 'warn',
-    'eqeqeq': ['error', 'always'],
+    eqeqeq: ['error', 'always'],
   },
   overrides: [
     {
-      // Regras relaxadas apenas para ficheiros de teste
-      files: ['test/**/*.ts', 'src/**/*.test.ts', 'src/**/*.spec.ts'],
+      files: ['packages/core/src/**/*.ts'],
+      parserOptions: {
+        tsconfigRootDir: __dirname,
+        project: ['./packages/core/tsconfig.eslint.json'],
+      },
+      extends: ['plugin:@typescript-eslint/recommended-requiring-type-checking'],
+      rules: {
+        '@typescript-eslint/explicit-function-return-type': 'warn',
+        '@typescript-eslint/no-non-null-assertion': 'error',
+        '@typescript-eslint/no-floating-promises': 'error',
+        '@typescript-eslint/await-thenable': 'error',
+        '@typescript-eslint/no-misused-promises': 'error',
+        'no-throw-literal': 'error',
+      },
+    },
+    {
+      files: ['packages/core/test/**/*.ts'],
+      parserOptions: {
+        tsconfigRootDir: __dirname,
+        project: ['./packages/core/tsconfig.eslint.json'],
+      },
+      rules: {
+        '@typescript-eslint/explicit-function-return-type': 'off',
+        '@typescript-eslint/no-non-null-assertion': 'off',
+        'no-console': 'off',
+      },
+    },
+
+    {
+      files: ['packages/cli/src/**/*.ts'],
+      parserOptions: {
+        tsconfigRootDir: __dirname,
+        project: ['./packages/cli/tsconfig.eslint.json'],
+      },
+      extends: ['plugin:@typescript-eslint/recommended-requiring-type-checking'],
+      rules: {
+        '@typescript-eslint/explicit-function-return-type': 'warn',
+        '@typescript-eslint/no-non-null-assertion': 'error',
+        '@typescript-eslint/no-floating-promises': 'error',
+        '@typescript-eslint/await-thenable': 'error',
+        '@typescript-eslint/no-misused-promises': 'error',
+        'no-throw-literal': 'error',
+      },
+    },
+    {
+      files: ['packages/cli/test/**/*.ts'],
+      parserOptions: {
+        tsconfigRootDir: __dirname,
+        project: ['./packages/cli/tsconfig.eslint.json'],
+      },
       rules: {
         '@typescript-eslint/explicit-function-return-type': 'off',
         '@typescript-eslint/no-non-null-assertion': 'off',

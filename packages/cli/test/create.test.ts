@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createProject } from '../../src/cli/commands/create.js';
-import { fileExists, dirExists } from '../../src/cli/utils/fs.js';
+import { createProject } from '../src/commands/create.js';
+import { fileExists, dirExists } from '../src/utils/fs.js';
 
 let tmp: string;
 let originalCwd: string;
