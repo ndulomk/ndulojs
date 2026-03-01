@@ -3,7 +3,7 @@
   "private": true,
   "workspaces": ["packages/*"],
   "scripts": {
-    "build": "bun run --filter '@ndulojs/core' build && bun run --filter '@ndulojs/cli' build",
+    "build": "bun run --filter 'ndulojs' build && bun run --filter 'ndulojs-cli' build",
     "typecheck": "bun run --filter '*' typecheck",
     "lint": "eslint 'packages/*/src/**/*.ts' 'packages/*/test/**/*.ts'",
     "lint:fix": "eslint 'packages/*/src/**/*.ts' 'packages/*/test/**/*.ts' --fix",
@@ -20,9 +20,5 @@
     "eslint-plugin-prettier": "^5.0.0",
     "prettier": "^3.0.0",
     "typescript": "^5.5.0"
-  },
-  "dependencies": {
-    "@types/node": "^25.3.3",
-    "i": "^0.3.7"
   }
 }

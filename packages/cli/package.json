@@ -1,16 +1,12 @@
 {
-  "name": "@ndulojs/cli",
-  "version": "0.1.0",
-  "description": "CLI for NduloJS — scaffold modules, submodules, and full projects",
+  "name": "ndulojs-cli",
+  "version": "1.0.0",
+  "description": "CLI for NduloJS — scaffold modules, submodules, and full projects in seconds",
   "type": "module",
   "main": "./dist/bin.js",
   "bin": {
-    "ndulo": "./dist/bin.js"
-  },
-  "exports": {
-    ".": {
-      "import": "./dist/bin.js"
-    }
+    "ndulo": "./dist/bin.js",
+    "ndulojs": "./dist/bin.js"
   },
   "files": [
     "dist",
@@ -26,11 +22,11 @@
     "test:coverage": "vitest run --coverage",
     "clean": "rm -rf dist"
   },
-  "keywords": ["cli", "ndulojs", "scaffold", "clean-architecture"],
+  "keywords": ["cli", "ndulojs", "scaffold", "clean-architecture", "codegen"],
   "author": "NduloJS",
   "license": "MIT",
   "dependencies": {
-    "@ndulojs/core": "^0.1.0"
+    "ndulojs": "^1.0.0"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.0.0",
