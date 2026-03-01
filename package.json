@@ -20,5 +20,8 @@
     "eslint-plugin-prettier": "^5.0.0",
     "prettier": "^3.0.0",
     "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "@types/node": "^25.3.3"
   }
 }

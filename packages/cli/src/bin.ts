@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 import { createProject } from './commands/create.js';
 import { generateModule } from './commands/generate.js';
 import { addFile } from './commands/add.js';
