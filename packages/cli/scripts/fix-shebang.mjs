@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 import { readFile, writeFile, chmod } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,9 +18,8 @@ try {
   process.exit(1);
 }
 
-if (!content.startsWith('#!/usr/bin/env node')) {
-  await writeFile(bin, `#!/usr/bin/env node\n${content}`, 'utf-8');
-}
+const stripped = content.replace(/^#!.*\n/, '');
+await writeFile(bin, `#!/usr/bin/env node\n${stripped}`, 'utf-8');
 
 await chmod(bin, 0o755);
 process.stdout.write(`✔ dist/bin.js — shebang ok, chmod 755\n`);

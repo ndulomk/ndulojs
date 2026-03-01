@@ -1,6 +1,6 @@
 {
   "name": "ndulojs-cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "CLI for NduloJS — scaffold modules, submodules, and full projects in seconds",
   "type": "module",
   "main": "./dist/bin.js",
@@ -22,7 +22,13 @@
     "test:coverage": "vitest run --coverage",
     "clean": "rm -rf dist"
   },
-  "keywords": ["cli", "ndulojs", "scaffold", "clean-architecture", "codegen"],
+  "keywords": [
+    "cli",
+    "ndulojs",
+    "scaffold",
+    "clean-architecture",
+    "codegen"
+  ],
   "author": "NduloJS",
   "license": "MIT",
   "dependencies": {

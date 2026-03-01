@@ -1,6 +1,6 @@
 {
   "name": "ndulojs",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A TypeScript backend framework that enforces good architecture from day one",
   "type": "module",
   "main": "./dist/index.js",
@@ -27,7 +27,14 @@
     "test:coverage": "vitest run --coverage",
     "clean": "rm -rf dist"
   },
-  "keywords": ["framework", "backend", "typescript", "clean-architecture", "elysia", "bun"],
+  "keywords": [
+    "framework",
+    "backend",
+    "typescript",
+    "clean-architecture",
+    "elysia",
+    "bun"
+  ],
   "author": "NduloJS",
   "license": "MIT",
   "peerDependencies": {
