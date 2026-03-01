@@ -24,12 +24,13 @@ export const buildCorsHeaders = (
   const allowedOrigin = config.origins === '*' ? '*' : (origin ?? '*');
   const methods = (config.methods ?? DEFAULT_METHODS).join(', ');
   const headers = (config.allowedHeaders ?? DEFAULT_HEADERS).join(', ');
+  const exposeHeaders = (config.exposeHeaders ?? DEFAULT_HEADERS).join(', ');
 
   const result: Record<string, string> = {
     'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': methods,
     'Access-Control-Allow-Headers': headers,
-    'Access-Control-Expose-Headers': headers,
+    'Access-Control-Expose-Headers': exposeHeaders,
   };
 
   if (config.credentials) {

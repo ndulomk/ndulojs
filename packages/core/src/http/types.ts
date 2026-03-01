@@ -53,6 +53,7 @@ export type CorsConfig = {
   readonly origins: string[] | '*';
   readonly methods?: HttpMethod[];
   readonly allowedHeaders?: string[];
+  readonly exposeHeaders?: string[];
   readonly credentials?: boolean;
 };
 

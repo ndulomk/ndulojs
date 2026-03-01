@@ -1,6 +1,6 @@
 {
   "name": "ndulojs-cli",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "CLI for NduloJS — scaffold modules, submodules, and full projects in seconds",
   "type": "module",
   "main": "./dist/bin.js",
