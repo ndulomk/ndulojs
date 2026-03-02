@@ -13,7 +13,13 @@ export type LoggerConfig = {
   readonly level?: LogLevel | undefined;
   /** Root directory for log files. Default: 'logs' */
   readonly dir?: string | undefined;
-  /** Pretty-print to terminal instead of writing to files. Default: false */
+  /**
+   * Pretty-print to terminal instead of writing to files. Default: false
+   *
+   * Pass `pretty: true` in development for coloured terminal output.
+   * In production (pretty: false) logs are written to rotating daily files
+   * under `dir/app/`, `dir/http/`, and `dir/error/` automatically.
+   */
   readonly pretty?: boolean | undefined;
   /** Maximum number of rotated files to keep per channel. Default: 30 */
   readonly retainDays?: number | undefined;
@@ -21,7 +27,9 @@ export type LoggerConfig = {
 
 /**
  * Context fields that can be bound to a logger instance.
- * All fields are optional — bind what you have.
+ *
+ * Named fields are explicitly typed. The index signature allows arbitrary
+ * extra fields — values must be serialisable primitives so pino can encode them.
  */
 export type LogContext = {
   readonly requestId?: string | undefined;
@@ -29,6 +37,13 @@ export type LogContext = {
   readonly service?: string | undefined;
   readonly component?: string | undefined;
   readonly traceId?: string | undefined;
+  readonly method?: string | undefined;
+  readonly path?: string | undefined;
+  readonly statusCode?: number | undefined;
+  readonly durationMs?: number | undefined;
+  readonly userAgent?: string | undefined;
+  readonly ip?: string | undefined;
+  readonly error?: string | undefined;
   [key: string]: string | number | boolean | undefined;
 };
 

@@ -30,6 +30,7 @@ export const formatErrorResponse = (
     code?: string | undefined;
     details?: unknown;
     resource?: string | undefined;
+    retryAfter?: number | undefined;
     timestamp: string;
   };
 } => ({
@@ -40,6 +41,7 @@ export const formatErrorResponse = (
     code: 'code' in error ? (error as { code?: string }).code : undefined,
     details: error.type === 'VALIDATION_ERROR' ? error.errors : undefined,
     resource: 'resource' in error ? (error as { resource?: string }).resource : undefined,
+    retryAfter: error.type === 'TOO_MANY_REQUESTS' ? error.retryAfter : undefined,
     timestamp: error.timestamp,
   },
 });
@@ -60,6 +62,7 @@ export const errorLogLevel = (error: AppError): 'error' | 'warn' | 'info' => {
   if (error.type === 'UNAUTHORIZED' || error.type === 'FORBIDDEN') return 'info';
   if (error.type === 'VALIDATION_ERROR') return 'info';
   if (error.type === 'NOT_FOUND') return 'info';
+  if (error.type === 'TOO_MANY_REQUESTS') return 'warn';
   if (error.type === 'CONFLICT' || error.type === 'BUSINESS_ERROR') return 'warn';
   return 'warn';
 };

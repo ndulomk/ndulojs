@@ -160,16 +160,15 @@ describe('ErrorFactory', () => {
   });
 
   describe('tooManyRequests', () => {
-    it('has type BUSINESS_ERROR, statusCode 429, code TOO_MANY_REQUESTS', () => {
+    it('has type TOO_MANY_REQUESTS, statusCode 429, code TOO_MANY_REQUESTS', () => {
       const error = ErrorFactory.tooManyRequests('Slow down', 60);
-      expect(error.type).toBe('BUSINESS_ERROR');
+      expect(error.type).toBe('TOO_MANY_REQUESTS');
       expect(error.statusCode).toBe(429);
-      expect(error.code).toBe('TOO_MANY_REQUESTS');
     });
 
-    it('includes retryAfter in metadata', () => {
+    it('includes retryAfter', () => {
       const error = ErrorFactory.tooManyRequests('Slow down', 60);
-      expect(error.metadata?.retryAfter).toBe(60);
+      expect(error.retryAfter).toBe(60);
     });
   });
 });

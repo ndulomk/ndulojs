@@ -1,6 +1,6 @@
 {
   "name": "ndulojs-cli",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "CLI for NduloJS — scaffold modules, submodules, and full projects in seconds",
   "type": "module",
   "main": "./dist/bin.js",
@@ -13,14 +13,14 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc --project tsconfig.json && node scripts/fix-shebang.mjs",
+    "build": "rm -rf dist tsconfig.tsbuildinfo && tsc --project tsconfig.json && node scripts/fix-shebang.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist tsconfig.tsbuildinfo"
   },
   "keywords": [
     "cli",

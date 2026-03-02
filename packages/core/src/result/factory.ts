@@ -7,6 +7,7 @@ import type {
   ForbiddenError,
   InternalServerError,
   NotFoundError,
+  TooManyRequestsError,
   UnauthorizedError,
   ValidationError,
   ValidationFieldError,
@@ -143,7 +144,6 @@ export const ErrorFactory = {
    * Use for domain logic failures that aren't validation errors.
    *
    * @example
-   * // Stock would go negative
    * return Err(ErrorFactory.business('Insufficient stock', 'INSUFFICIENT_STOCK'));
    */
   business: (message: string, code?: string, component?: string): BusinessError =>
@@ -212,16 +212,24 @@ export const ErrorFactory = {
     }),
 
   /**
-   * 429 — Too many requests. Include retryAfter in seconds.
+   * 429 — Too many requests.
+   *
+   * @param retryAfter - Seconds until the client may retry.
+   *
+   * @example
+   * return Err(ErrorFactory.tooManyRequests('Slow down.', 30));
    */
-  tooManyRequests: (message: string, retryAfter: number, component?: string): BusinessError =>
-    createError<BusinessError>({
-      type: 'BUSINESS_ERROR',
-      name: 'RateLimitError',
+  tooManyRequests: (
+    message: string,
+    retryAfter: number,
+    component?: string,
+  ): TooManyRequestsError =>
+    createError<TooManyRequestsError>({
+      type: 'TOO_MANY_REQUESTS',
+      name: 'TooManyRequestsError',
       statusCode: 429,
       message,
-      code: 'TOO_MANY_REQUESTS',
+      retryAfter,
       component,
-      metadata: { retryAfter },
     }),
 };

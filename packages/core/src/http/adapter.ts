@@ -1,13 +1,18 @@
-import type { AppConfig, Handler, HttpMethod, IHttpAdapter, RouteDefinition } from './types';
+import type {
+  AppConfig,
+  AppInstance,
+  Handler,
+  HttpMethod,
+  IHttpAdapter,
+  RouteDefinition,
+} from './types';
 import { processHandlerResult } from './middlewares/result.middleware';
-import { buildCorsHeaders, handlePreflight, isOriginAllowed } from './middlewares/cors.middleware';
+import { createLogger } from '../logger/index';
 import {
-  createDefaultLogger,
   createRequestLog,
   createResponseLog,
   generateRequestId,
 } from './middlewares/logger.middleware';
-import { createMemoryRateLimitStore } from './middlewares/rate-limit.middleware';
 
 type RouteMeta = Omit<RouteDefinition, 'method' | 'path' | 'handler'>;
 
@@ -41,7 +46,6 @@ type ElysiaHandlerCtx = {
 
 /**
  * Converts Headers to a plain object.
- * Uses forEach for compatibility — Headers.entries() isn't universally available.
  */
 const headersToObject = (headers: Headers): Record<string, string> => {
   const result: Record<string, string> = {};
@@ -53,7 +57,6 @@ const headersToObject = (headers: Headers): Record<string, string> => {
 
 /**
  * Only pass detail to Elysia when meta is defined.
- * Avoids exactOptionalPropertyTypes clash with { detail: undefined }.
  */
 const routeOpts = (meta?: RouteMeta): Record<string, unknown> =>
   meta !== undefined ? { detail: meta } : {};
@@ -77,7 +80,7 @@ const wrapHandler =
 /**
  * Builds a scoped IHttpAdapter for grouped routes.
  */
-const makeGroupAdapter = (g: AnyElysia): IHttpAdapter => {
+const makeGroupAdapter = (g: AnyElysia, elysiaRef: AnyElysia): IHttpAdapter => {
   const adapter: IHttpAdapter = {
     get(p, h, m?) {
       g.get(p, wrapHandler(h), routeOpts(m));
@@ -101,7 +104,7 @@ const makeGroupAdapter = (g: AnyElysia): IHttpAdapter => {
     },
     group(prefix, fn) {
       g.group(prefix, (sub) => {
-        fn(makeGroupAdapter(sub));
+        fn(makeGroupAdapter(sub, elysiaRef));
         return sub;
       });
       return this;
@@ -109,6 +112,9 @@ const makeGroupAdapter = (g: AnyElysia): IHttpAdapter => {
     use(plugin) {
       g.use(plugin);
       return this;
+    },
+    getElysia() {
+      return elysiaRef;
     },
     listen() {
       return;
@@ -118,53 +124,49 @@ const makeGroupAdapter = (g: AnyElysia): IHttpAdapter => {
   return adapter;
 };
 
-export const createElysiaAdapter = async (config: AppConfig): Promise<IHttpAdapter> => {
+export const createElysiaAdapter = async (config: AppConfig): Promise<AppInstance> => {
   const elysiaModule = await import('elysia');
   const ElysiaClass = elysiaModule.Elysia ?? elysiaModule.default;
-  const app = new (ElysiaClass as unknown as new () => AnyElysia)();
+  const elysia = new (ElysiaClass as unknown as new () => AnyElysia)();
 
-  const logger = createDefaultLogger(config.logger ?? { enabled: true, level: 'info' });
-  createMemoryRateLimitStore();
+  // --- Unified logger (pino-based, writes to files or pretty terminal) ---
+  const loggerConfig = config.logger ?? {};
+  const logger = createLogger(
+    loggerConfig.enabled === false
+      ? {} // createLogger with empty config still works; we gate logging below
+      : {
+          level: loggerConfig.level,
+          dir: loggerConfig.dir,
+          pretty: loggerConfig.pretty,
+          retainDays: loggerConfig.retainDays,
+        },
+  );
 
-  if (config.cors) {
-    const corsConfig = config.cors;
-    app.onRequest((ctx: ElysiaHandlerCtx): Response | undefined => {
-      const origin = ctx.request.headers.get('origin');
-      if (!isOriginAllowed(origin, corsConfig)) {
-        ctx.set.status = 403;
-        return new Response('Forbidden: Origin not allowed', { status: 403 });
-      }
-      Object.assign(ctx.set.headers, buildCorsHeaders(origin, corsConfig));
-      if (ctx.request.method === 'OPTIONS') {
-        return handlePreflight(origin, corsConfig);
-      }
-      return undefined;
-    });
-  }
+  const loggingEnabled = loggerConfig.enabled !== false;
 
   // --- Request logging — WeakMap so requests are GC'd automatically ---
   const requestIds = new WeakMap<Request, string>();
   const requestTimes = new WeakMap<Request, number>();
 
-  if (config.logger?.enabled !== false) {
-    app.onRequest((ctx: { request: Request }): void => {
+  if (loggingEnabled) {
+    elysia.onRequest((ctx: { request: Request }): void => {
       const id = generateRequestId();
       requestIds.set(ctx.request, id);
       requestTimes.set(ctx.request, Date.now());
-      logger('info', createRequestLog(ctx.request, id), 'Incoming request');
+      logger.http.info(createRequestLog(ctx.request, id), 'Incoming request');
     });
   }
 
   // --- Result middleware + response logging ---
-  // Returning a value from onAfterHandle replaces the response in Elysia
-  app.onAfterHandle((ctx: ElysiaHandlerCtx & { response: unknown }): unknown => {
+  elysia.onAfterHandle((ctx: ElysiaHandlerCtx & { response: unknown }): unknown => {
     const { body, status } = processHandlerResult(ctx.response);
     ctx.set.status = status;
 
-    if (config.logger?.enabled !== false) {
+    if (loggingEnabled) {
       const id = requestIds.get(ctx.request) ?? 'unknown';
       const start = requestTimes.get(ctx.request) ?? Date.now();
-      logger('info', createResponseLog(ctx.request, id, status, start), 'Request completed');
+      const level = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info';
+      logger.http[level](createResponseLog(ctx.request, id, status, start), 'Request completed');
     }
 
     return body;
@@ -178,7 +180,7 @@ export const createElysiaAdapter = async (config: AppConfig): Promise<IHttpAdapt
     const swaggerFn = (swaggerModule.swagger ?? swaggerModule.default) as (
       opts: unknown,
     ) => unknown;
-    app.use(
+    elysia.use(
       swaggerFn({
         documentation: {
           info: {
@@ -197,55 +199,65 @@ export const createElysiaAdapter = async (config: AppConfig): Promise<IHttpAdapt
 
   const adapter: IHttpAdapter = {
     get(path, handler, meta?) {
-      app.get(path, wrapHandler(handler), routeOpts(meta));
+      elysia.get(path, wrapHandler(handler), routeOpts(meta));
       return this;
     },
     post(path, handler, meta?) {
-      app.post(path, wrapHandler(handler), routeOpts(meta));
+      elysia.post(path, wrapHandler(handler), routeOpts(meta));
       return this;
     },
     put(path, handler, meta?) {
-      app.put(path, wrapHandler(handler), routeOpts(meta));
+      elysia.put(path, wrapHandler(handler), routeOpts(meta));
       return this;
     },
     patch(path, handler, meta?) {
-      app.patch(path, wrapHandler(handler), routeOpts(meta));
+      elysia.patch(path, wrapHandler(handler), routeOpts(meta));
       return this;
     },
     delete(path, handler, meta?) {
-      app.delete(path, wrapHandler(handler), routeOpts(meta));
+      elysia.delete(path, wrapHandler(handler), routeOpts(meta));
       return this;
     },
-
     group(prefix, fn) {
-      app.group(prefix, (grouped) => {
-        fn(makeGroupAdapter(grouped));
+      elysia.group(prefix, (grouped) => {
+        fn(makeGroupAdapter(grouped, elysia));
         return grouped;
       });
       return this;
     },
-
     use(plugin) {
-      app.use(plugin);
+      elysia.use(plugin);
       return this;
     },
+    getElysia() {
+      return elysia;
+    },
     listen(port) {
-      app.listen(port);
+      elysia.listen(port);
     },
     stop: async () => {
-      await app.stop();
+      await elysia.stop();
     },
   };
 
-  return adapter;
+  return { app: adapter, logger };
 };
 
 /**
  * Creates the NduloJS app.
  *
+ * Returns both the HTTP adapter and the logger — the logger is already
+ * wired internally for request/response logging. Use it for application logs too.
+ *
+ * Logs are written to rotating daily files by default (logs/app/, logs/http/, logs/error/).
+ * Pass `logger: { pretty: true }` for coloured terminal output in development.
+ *
  * @example
- * const app = await createApp({ port: 3000, cors: { origins: '*' } });
+ * const { app, logger } = await createApp({ port: 3000 });
+ *
+ * logger.app.info('Server started');
+ *
  * app.get('/health', () => Ok({ status: 'ok' }));
  * app.listen(3000);
  */
-export const createApp = (config: AppConfig): Promise<IHttpAdapter> => createElysiaAdapter(config);
+export const createApp = (config: AppConfig): Promise<AppInstance> => createElysiaAdapter(config);

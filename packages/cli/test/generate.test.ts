@@ -87,13 +87,17 @@ describe('moduleFiles', () => {
 });
 
 describe('submoduleFiles', () => {
-  it('nests files under parent module', () => {
-    const parent = deriveNames('farms');
-    const child = deriveNames('members');
-    const files = submoduleFiles(child, parent);
-    for (const f of files) {
-      expect(f.path).toContain('src/modules/farms/members/');
-    }
+  it('creates all expected submodule files', () => {
+    const files = submoduleFiles(deriveNames('members'), deriveNames('farms'));
+    const paths = files.map((f) => f.path);
+
+    expect(paths).toContain('src/modules/farms/application/dtos/member.dto.ts');
+    expect(paths).toContain('src/modules/farms/application/ports/member.port.ts');
+    expect(paths).toContain('src/modules/farms/application/services/member.service.ts');
+    expect(paths).toContain('src/modules/farms/infrastructure/persistence/member.repository.ts');
+    expect(paths).toContain(
+      'src/modules/farms/infrastructure/http/controllers/member.controller.ts',
+    );
   });
 
   it('does not generate events or module entry', () => {

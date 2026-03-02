@@ -14,17 +14,17 @@ export const ${n.camel}Events = {} as const;
 `,
 });
 
-export const dtoTemplate = (n: ModuleNames): GeneratedFile => ({
-  path: `src/modules/${n.kebabPlural}/application/dtos/${n.kebab}.dto.ts`,
+export const dtoTemplate = (n: ModuleNames, parentDir?: string): GeneratedFile => ({
+  path: `src/modules/${parentDir ?? n.kebabPlural}/application/dtos/${n.kebab}.dto.ts`,
   content: `export type Create${n.pascal}DTO = Record<string, unknown>;
 export type Update${n.pascal}DTO = Partial<Create${n.pascal}DTO>;
 export type ${n.pascal}ResponseDTO = { id: string };
 `,
 });
 
-export const portTemplate = (n: ModuleNames): GeneratedFile => ({
-  path: `src/modules/${n.kebabPlural}/application/ports/${n.kebab}.port.ts`,
-  content: `import type { Result, AppError } from '@ndulojs/core';
+export const portTemplate = (n: ModuleNames, parentDir?: string): GeneratedFile => ({
+  path: `src/modules/${parentDir ?? n.kebabPlural}/application/ports/${n.kebab}.port.ts`,
+  content: `import type { Result, AppError } from 'ndulojs';
 import type { Create${n.pascal}DTO, ${n.pascal}ResponseDTO } from '../dtos/${n.kebab}.dto.js';
 
 export interface I${n.pascal}Repository {}
@@ -33,25 +33,25 @@ export interface I${n.pascal}Service {}
 `,
 });
 
-export const serviceTemplate = (n: ModuleNames): GeneratedFile => ({
-  path: `src/modules/${n.kebabPlural}/application/services/${n.kebab}.service.ts`,
+export const serviceTemplate = (n: ModuleNames, parentDir?: string): GeneratedFile => ({
+  path: `src/modules/${parentDir ?? n.kebabPlural}/application/services/${n.kebab}.service.ts`,
   content: `import type { I${n.pascal}Repository, I${n.pascal}Service } from '../ports/${n.kebab}.port.js';
 
 export const create${n.pascal}Service = (repo: I${n.pascal}Repository): I${n.pascal}Service => ({});
 `,
 });
 
-export const repositoryTemplate = (n: ModuleNames): GeneratedFile => ({
-  path: `src/modules/${n.kebabPlural}/infrastructure/persistence/${n.kebab}.repository.ts`,
+export const repositoryTemplate = (n: ModuleNames, parentDir?: string): GeneratedFile => ({
+  path: `src/modules/${parentDir ?? n.kebabPlural}/infrastructure/persistence/${n.kebab}.repository.ts`,
   content: `import type { I${n.pascal}Repository } from '../../application/ports/${n.kebab}.port.js';
 
 export const create${n.pascal}Repository = (): I${n.pascal}Repository => ({});
 `,
 });
 
-export const controllerTemplate = (n: ModuleNames): GeneratedFile => ({
-  path: `src/modules/${n.kebabPlural}/infrastructure/http/controllers/${n.kebab}.controller.ts`,
-  content: `import type { IHttpAdapter } from '@ndulojs/core';
+export const controllerTemplate = (n: ModuleNames, parentDir?: string): GeneratedFile => ({
+  path: `src/modules/${parentDir ?? n.kebabPlural}/infrastructure/http/controllers/${n.kebab}.controller.ts`,
+  content: `import type { IHttpAdapter } from 'ndulojs';
 import type { I${n.pascal}Service } from '../../../application/ports/${n.kebab}.port.js';
 
 export const create${n.pascal}Controller = (app: IHttpAdapter, service: I${n.pascal}Service): void => {
@@ -64,7 +64,7 @@ export const create${n.pascal}Controller = (app: IHttpAdapter, service: I${n.pas
 
 export const moduleTemplate = (n: ModuleNames): GeneratedFile => ({
   path: `src/modules/${n.kebabPlural}/${n.kebab}.module.ts`,
-  content: `import type { IHttpAdapter } from '@ndulojs/core';
+  content: `import type { IHttpAdapter } from 'ndulojs';
 import { create${n.pascal}Repository } from './infrastructure/persistence/${n.kebab}.repository.js';
 import { create${n.pascal}Service } from './application/services/${n.kebab}.service.js';
 import { create${n.pascal}Controller } from './infrastructure/http/controllers/${n.kebab}.controller.js';
@@ -87,19 +87,10 @@ export const moduleFiles = (n: ModuleNames): GeneratedFile[] => [
   moduleTemplate(n),
 ];
 
-export const submoduleFiles = (n: ModuleNames, parent: ModuleNames): GeneratedFile[] => {
-  const nest = (f: GeneratedFile): GeneratedFile => ({
-    ...f,
-    path: f.path.replace(
-      `src/modules/${n.kebabPlural}/`,
-      `src/modules/${parent.kebabPlural}/${n.kebabPlural}/`,
-    ),
-  });
-  return [
-    dtoTemplate(n),
-    portTemplate(n),
-    serviceTemplate(n),
-    repositoryTemplate(n),
-    controllerTemplate(n),
-  ].map(nest);
-};
+export const submoduleFiles = (n: ModuleNames, parent: ModuleNames): GeneratedFile[] => [
+  dtoTemplate(n, parent.kebabPlural),
+  portTemplate(n, parent.kebabPlural),
+  serviceTemplate(n, parent.kebabPlural),
+  repositoryTemplate(n, parent.kebabPlural),
+  controllerTemplate(n, parent.kebabPlural),
+];

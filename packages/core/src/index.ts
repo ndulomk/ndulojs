@@ -47,13 +47,11 @@ export type {
 
 // HTTP
 export { createApp } from './http/adapter.js';
-export { RateLimitPresets } from './http/types.js';
 export type {
+  AppInstance,
   IHttpAdapter,
   Handler,
   RequestContext,
   AppConfig,
-  CorsConfig,
-  RateLimitConfig,
   SwaggerConfig,
 } from './http/types.js';

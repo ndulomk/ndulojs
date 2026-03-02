@@ -1,6 +1,10 @@
-import type { LoggerConfig } from '../types';
+import type { LogContext } from '../../logger';
 
-export type LogEntry = {
+/**
+ * LogEntry extends LogContext so it can be passed directly to NduloLogger methods.
+ * error is typed as string | undefined — serialise Error objects before passing.
+ */
+export type LogEntry = LogContext & {
   readonly requestId: string;
   readonly method: string;
   readonly path: string;
@@ -8,61 +12,19 @@ export type LogEntry = {
   readonly durationMs?: number | undefined;
   readonly userAgent?: string | undefined;
   readonly ip?: string | undefined;
-  readonly error?: unknown;
-};
-
-export type LoggerFn = (level: 'info' | 'warn' | 'error', entry: LogEntry, message: string) => void;
-
-/**
- * Default logger — writes structured JSON to stdout/stderr.
- * In production, pipe this to your log aggregator.
- */
-export const createDefaultLogger = (config: LoggerConfig): LoggerFn => {
-  if (!config.enabled) {
-    return () => undefined;
-  }
-
-  const levelPriority: Record<string, number> = {
-    debug: 0,
-    info: 1,
-    warn: 2,
-    error: 3,
-  };
-  const configuredLevel = levelPriority[config.level ?? 'info'] ?? 1;
-
-  return (level, entry, message) => {
-    const priority = levelPriority[level] ?? 1;
-    if (priority < configuredLevel) return;
-
-    const output = JSON.stringify({
-      level,
-      timestamp: new Date().toISOString(),
-      message,
-      ...entry,
-    });
-
-    if (level === 'error') {
-      process.stderr.write(output + '\n');
-    } else {
-      process.stdout.write(output + '\n');
-    }
-  };
+  readonly error?: string | undefined;
 };
 
 /**
  * Extracts a client IP from a request.
  */
-export const extractIp = (request: Request): string | undefined => {
-  return (
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-    request.headers.get('x-real-ip') ??
-    undefined
-  );
-};
+export const extractIp = (request: Request): string | undefined =>
+  request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+  request.headers.get('x-real-ip') ??
+  undefined;
 
 /**
  * Generates a simple request ID.
- * Uses crypto.randomUUID if available, falls back to timestamp + random.
  */
 export const generateRequestId = (): string => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {

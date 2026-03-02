@@ -84,6 +84,15 @@ export type InternalServerError = BaseAppError & {
 };
 
 /**
+ * 429 — Too many requests.
+ * Distinct from BusinessError so it can be matched precisely in switch statements.
+ */
+export type TooManyRequestsError = BaseAppError & {
+  readonly type: 'TOO_MANY_REQUESTS';
+  readonly retryAfter: number;
+};
+
+/**
  * Discriminated union of all possible application errors.
  * Use this as the E in Result<T, AppError>.
  */
@@ -96,7 +105,8 @@ export type AppError =
   | BusinessError
   | DatabaseError
   | ExternalServiceError
-  | InternalServerError;
+  | InternalServerError
+  | TooManyRequestsError;
 
 /**
  * All possible AppError type strings.
