@@ -29,15 +29,30 @@ export type Handler<T = unknown> = (
 ) => Promise<Result<T, AppError> | T> | Result<T, AppError> | T;
 
 /**
+ * Swagger/OpenAPI detail — shown in /docs.
+ */
+export type RouteDetail = {
+  readonly tags?: string[];
+  readonly summary?: string;
+  readonly description?: string;
+};
+
+/**
  * Route definition — path + handler + optional metadata.
+ *
+ * `detail`  → Swagger/OpenAPI info (tags, summary, description)
+ * `body`    → TypeBox schema for request body — passed to Elysia for validation + Swagger
+ * `query`   → TypeBox schema for query string params
+ * `params`  → TypeBox schema for path params
  */
 export type RouteDefinition = {
   readonly method: HttpMethod;
   readonly path: string;
   readonly handler: Handler;
-  readonly tags?: string[];
-  readonly summary?: string;
-  readonly description?: string;
+  readonly detail?: RouteDetail;
+  readonly body?: unknown;
+  readonly query?: unknown;
+  readonly params?: unknown;
 };
 
 /**
@@ -51,27 +66,10 @@ export type Middleware = (ctx: RequestContext) => Promise<void | Response> | voi
  * Mirrors LoggerConfig from the logger package — unified.
  */
 export type LoggerConfig = {
-  /**
-   * Minimum log level. Default: 'info'
-   */
   readonly level?: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | undefined;
-  /**
-   * Root directory for log files. Default: 'logs'
-   * Logs are written here automatically — no manual setup needed.
-   */
   readonly dir?: string | undefined;
-  /**
-   * Pretty-print to terminal instead of writing files.
-   * Use true in development, false (default) in production.
-   */
   readonly pretty?: boolean | undefined;
-  /**
-   * How many days of rotated files to retain per channel. Default: 30
-   */
   readonly retainDays?: number | undefined;
-  /**
-   * Set to false to disable all logging entirely. Default: true
-   */
   readonly enabled?: boolean | undefined;
 };
 
@@ -98,13 +96,6 @@ export type AppConfig = {
 
 /**
  * The return value of createApp().
- * Gives access to both the HTTP adapter and the logger instance.
- *
- * @example
- * const { app, logger } = await createApp({ port: 3000 });
- * logger.app.info('Server started');
- * app.get('/health', () => Ok({ status: 'ok' }));
- * app.listen(3000);
  */
 export type AppInstance = {
   readonly app: IHttpAdapter;
@@ -117,87 +108,34 @@ export type AppInstance = {
  * All framework-specific code lives behind this contract.
  */
 export interface IHttpAdapter {
-  /**
-   * Register a GET route.
-   */
   get(
     path: string,
     handler: Handler,
     meta?: Omit<RouteDefinition, 'method' | 'path' | 'handler'>,
   ): this;
-
-  /**
-   * Register a POST route.
-   */
   post(
     path: string,
     handler: Handler,
     meta?: Omit<RouteDefinition, 'method' | 'path' | 'handler'>,
   ): this;
-
-  /**
-   * Register a PUT route.
-   */
   put(
     path: string,
     handler: Handler,
     meta?: Omit<RouteDefinition, 'method' | 'path' | 'handler'>,
   ): this;
-
-  /**
-   * Register a PATCH route.
-   */
   patch(
     path: string,
     handler: Handler,
     meta?: Omit<RouteDefinition, 'method' | 'path' | 'handler'>,
   ): this;
-
-  /**
-   * Register a DELETE route.
-   */
   delete(
     path: string,
     handler: Handler,
     meta?: Omit<RouteDefinition, 'method' | 'path' | 'handler'>,
   ): this;
-
-  /**
-   * Group routes under a common prefix.
-   */
   group(prefix: string, fn: (app: this) => void): this;
-
-  /**
-   * Apply a raw Elysia plugin.
-   *
-   * Use this for any Elysia-native plugin (jwt, bearer, etc.).
-   * The plugin is passed directly to the underlying Elysia instance.
-   *
-   * @example
-   * import { jwt } from '@elysiajs/jwt';
-   * app.use(jwt({ name: 'jwt', secret: process.env.JWT_SECRET }));
-   */
   use(plugin: unknown): this;
-
-  /**
-   * Escape hatch — returns the raw underlying Elysia instance.
-   *
-   * Use only when you need Elysia-specific features that the adapter
-   * doesn't expose. Anything done via getElysia() bypasses the abstraction.
-   *
-   * @example
-   * const elysia = app.getElysia();
-   * elysia.use(someElysiaOnlyPlugin());
-   */
   getElysia(): unknown;
-
-  /**
-   * Start listening on the configured port.
-   */
   listen(port: number): void;
-
-  /**
-   * Stop the server.
-   */
   stop(): Promise<void>;
 }

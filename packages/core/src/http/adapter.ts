@@ -56,10 +56,25 @@ const headersToObject = (headers: Headers): Record<string, string> => {
 };
 
 /**
- * Only pass detail to Elysia when meta is defined.
+ * Builds Elysia route options from NduloJS RouteMeta.
+ * `detail` (Swagger info) goes inside `detail`,
+ * and `body`/`query`/`params` (TypeBox schemas) go at the root level.
  */
-const routeOpts = (meta?: RouteMeta): Record<string, unknown> =>
-  meta !== undefined ? { detail: meta } : {};
+const routeOpts = (meta?: RouteMeta): Record<string, unknown> => {
+  if (meta === undefined) return {};
+
+  const opts: Record<string, unknown> = {};
+
+  if (meta.detail !== undefined) {
+    opts['detail'] = meta.detail;
+  }
+
+  if (meta.body !== undefined) opts['body'] = meta.body;
+  if (meta.query !== undefined) opts['query'] = meta.query;
+  if (meta.params !== undefined) opts['params'] = meta.params;
+
+  return opts;
+};
 
 /**
  * Wraps a NduloJS Handler into an Elysia-callable function.
@@ -129,11 +144,11 @@ export const createElysiaAdapter = async (config: AppConfig): Promise<AppInstanc
   const ElysiaClass = elysiaModule.Elysia ?? elysiaModule.default;
   const elysia = new (ElysiaClass as unknown as new () => AnyElysia)();
 
-  // --- Unified logger (pino-based, writes to files or pretty terminal) ---
+  // --- Unified logger ---
   const loggerConfig = config.logger ?? {};
   const logger = createLogger(
     loggerConfig.enabled === false
-      ? {} // createLogger with empty config still works; we gate logging below
+      ? {}
       : {
           level: loggerConfig.level,
           dir: loggerConfig.dir,
@@ -144,7 +159,7 @@ export const createElysiaAdapter = async (config: AppConfig): Promise<AppInstanc
 
   const loggingEnabled = loggerConfig.enabled !== false;
 
-  // --- Request logging — WeakMap so requests are GC'd automatically ---
+  // --- Request logging ---
   const requestIds = new WeakMap<Request, string>();
   const requestTimes = new WeakMap<Request, number>();
 
@@ -174,9 +189,7 @@ export const createElysiaAdapter = async (config: AppConfig): Promise<AppInstanc
 
   // --- Swagger ---
   if (config.swagger?.enabled) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const swaggerModule = await import('@elysiajs/swagger');
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     const swaggerFn = (swaggerModule.swagger ?? swaggerModule.default) as (
       opts: unknown,
     ) => unknown;
@@ -243,21 +256,4 @@ export const createElysiaAdapter = async (config: AppConfig): Promise<AppInstanc
   return { app: adapter, logger };
 };
 
-/**
- * Creates the NduloJS app.
- *
- * Returns both the HTTP adapter and the logger — the logger is already
- * wired internally for request/response logging. Use it for application logs too.
- *
- * Logs are written to rotating daily files by default (logs/app/, logs/http/, logs/error/).
- * Pass `logger: { pretty: true }` for coloured terminal output in development.
- *
- * @example
- * const { app, logger } = await createApp({ port: 3000 });
- *
- * logger.app.info('Server started');
- *
- * app.get('/health', () => Ok({ status: 'ok' }));
- * app.listen(3000);
- */
 export const createApp = (config: AppConfig): Promise<AppInstance> => createElysiaAdapter(config);
