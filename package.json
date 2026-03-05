@@ -1,7 +1,9 @@
 {
   "name": "ndulojs-monorepo",
   "private": true,
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "build": "bun run --filter 'ndulojs' build && bun run --filter 'ndulojs-cli' build",
     "typecheck": "bun run --filter '*' typecheck",
@@ -23,5 +25,6 @@
   },
   "dependencies": {
     "@types/node": "^25.3.3"
-  }
+  },
+  "version": "0.0.1"
 }

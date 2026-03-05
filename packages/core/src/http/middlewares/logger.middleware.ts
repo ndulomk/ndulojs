@@ -13,6 +13,7 @@ export type LogEntry = LogContext & {
   readonly userAgent?: string | undefined;
   readonly ip?: string | undefined;
   readonly error?: string | undefined;
+  readonly stack?: string | undefined;
 };
 
 /**
