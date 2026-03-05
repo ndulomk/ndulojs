@@ -6,13 +6,14 @@ import type {
   IHttpAdapter,
   RouteDefinition,
 } from './types';
-import { processHandlerResult } from './middlewares/result.middleware';
+import { isResult, processHandlerResult } from './middlewares/result.middleware';
 import { createLogger } from '../logger/index';
 import {
   createRequestLog,
   createResponseLog,
   generateRequestId,
 } from './middlewares/logger.middleware';
+import { isOk } from '../result';
 
 type RouteMeta = Omit<RouteDefinition, 'method' | 'path' | 'handler'>;
 
@@ -174,14 +175,24 @@ export const createElysiaAdapter = async (config: AppConfig): Promise<AppInstanc
 
   // --- Result middleware + response logging ---
   elysia.onAfterHandle((ctx: ElysiaHandlerCtx & { response: unknown }): unknown => {
-    const { body, status } = processHandlerResult(ctx.response);
+    const response = ctx.response;
+    const { body, status } = processHandlerResult(response);
     ctx.set.status = status;
 
     if (loggingEnabled) {
       const id = requestIds.get(ctx.request) ?? 'unknown';
       const start = requestTimes.get(ctx.request) ?? Date.now();
       const level = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info';
-      logger.http[level](createResponseLog(ctx.request, id, status, start), 'Request completed');
+
+      const errorStack = isResult(response) && !isOk(response) ? response.error.stack : undefined;
+
+      logger.http[level](
+        {
+          ...createResponseLog(ctx.request, id, status, start),
+          ...(errorStack !== undefined ? { stack: errorStack } : {}),
+        },
+        'Request completed',
+      );
     }
 
     return body;
