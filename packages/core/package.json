@@ -1,6 +1,6 @@
 {
   "name": "ndulojs",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "A TypeScript backend framework that enforces good architecture from day one",
   "type": "module",
   "main": "./dist/index.js",

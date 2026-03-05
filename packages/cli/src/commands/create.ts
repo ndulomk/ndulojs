@@ -35,7 +35,7 @@ const tsconfig = (): string =>
     2,
   );
 
-const indexTs = `import { createApp, createContainer, Ok } from '@ndulojs/core';
+const indexTs = `import { createApp, createContainer, Ok } from 'ndulojs';
 
 const container = createContainer();
 const app = await createApp({ port: Number(process.env['PORT']) || 3000 });

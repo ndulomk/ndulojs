@@ -8,6 +8,7 @@ import type {
 } from './types';
 import { isResult, processHandlerResult } from './middlewares/result.middleware';
 import { createLogger } from '../logger/index';
+import type { LoggerSuite } from '../logger/types';
 import {
   createRequestLog,
   createResponseLog,
@@ -16,6 +17,16 @@ import {
 import { isOk } from '../result';
 
 type RouteMeta = Omit<RouteDefinition, 'method' | 'path' | 'handler'>;
+
+/**
+ * Logging context passed down to every wrapped handler.
+ */
+type LogCtx = {
+  logger: LoggerSuite;
+  requestIds: WeakMap<Request, string>;
+  requestTimes: WeakMap<Request, number>;
+  loggingEnabled: boolean;
+};
 
 /**
  * Minimal Elysia instance shape we actually use.
@@ -31,7 +42,6 @@ type AnyElysia = {
   listen(port: number): AnyElysia;
   stop(): Promise<void>;
   onRequest(handler: unknown): AnyElysia;
-  onAfterHandle(handler: unknown): AnyElysia;
 };
 
 /**
@@ -58,18 +68,13 @@ const headersToObject = (headers: Headers): Record<string, string> => {
 
 /**
  * Builds Elysia route options from NduloJS RouteMeta.
- * `detail` (Swagger info) goes inside `detail`,
- * and `body`/`query`/`params` (TypeBox schemas) go at the root level.
  */
 const routeOpts = (meta?: RouteMeta): Record<string, unknown> => {
   if (meta === undefined) return {};
 
   const opts: Record<string, unknown> = {};
 
-  if (meta.detail !== undefined) {
-    opts['detail'] = meta.detail;
-  }
-
+  if (meta.detail !== undefined) opts['detail'] = meta.detail;
   if (meta.body !== undefined) opts['body'] = meta.body;
   if (meta.query !== undefined) opts['query'] = meta.query;
   if (meta.params !== undefined) opts['params'] = meta.params;
@@ -79,11 +84,12 @@ const routeOpts = (meta?: RouteMeta): Record<string, unknown> => {
 
 /**
  * Wraps a NduloJS Handler into an Elysia-callable function.
+ * Logging happens here — guaranteed to run for every handler, every time.
  */
 const wrapHandler =
-  (handler: Handler) =>
-  (ctx: ElysiaHandlerCtx): unknown =>
-    handler({
+  (handler: Handler, logCtx: LogCtx) =>
+  async (ctx: ElysiaHandlerCtx): Promise<unknown> => {
+    const result = await handler({
       request: ctx.request,
       params: ctx.params,
       query: ctx.query,
@@ -93,34 +99,56 @@ const wrapHandler =
       method: ctx.request.method as HttpMethod,
     });
 
+    const { body, status } = processHandlerResult(result);
+    ctx.set.status = status;
+
+    if (logCtx.loggingEnabled) {
+      const id = logCtx.requestIds.get(ctx.request) ?? 'unknown';
+      const start = logCtx.requestTimes.get(ctx.request) ?? Date.now();
+      const level = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info';
+      const errorStack =
+        isResult(result) && !isOk(result) ? (result.error as { stack?: string }).stack : undefined;
+
+      logCtx.logger.http[level](
+        {
+          ...createResponseLog(ctx.request, id, status, start),
+          ...(errorStack !== undefined ? { stack: errorStack } : {}),
+        },
+        'Request completed',
+      );
+    }
+
+    return body;
+  };
+
 /**
  * Builds a scoped IHttpAdapter for grouped routes.
  */
-const makeGroupAdapter = (g: AnyElysia, elysiaRef: AnyElysia): IHttpAdapter => {
+const makeGroupAdapter = (g: AnyElysia, elysiaRef: AnyElysia, logCtx: LogCtx): IHttpAdapter => {
   const adapter: IHttpAdapter = {
     get(p, h, m?) {
-      g.get(p, wrapHandler(h), routeOpts(m));
+      g.get(p, wrapHandler(h, logCtx), routeOpts(m));
       return this;
     },
     post(p, h, m?) {
-      g.post(p, wrapHandler(h), routeOpts(m));
+      g.post(p, wrapHandler(h, logCtx), routeOpts(m));
       return this;
     },
     put(p, h, m?) {
-      g.put(p, wrapHandler(h), routeOpts(m));
+      g.put(p, wrapHandler(h, logCtx), routeOpts(m));
       return this;
     },
     patch(p, h, m?) {
-      g.patch(p, wrapHandler(h), routeOpts(m));
+      g.patch(p, wrapHandler(h, logCtx), routeOpts(m));
       return this;
     },
     delete(p, h, m?) {
-      g.delete(p, wrapHandler(h), routeOpts(m));
+      g.delete(p, wrapHandler(h, logCtx), routeOpts(m));
       return this;
     },
     group(prefix, fn) {
       g.group(prefix, (sub) => {
-        fn(makeGroupAdapter(sub, elysiaRef));
+        fn(makeGroupAdapter(sub, elysiaRef, logCtx));
         return sub;
       });
       return this;
@@ -173,30 +201,8 @@ export const createElysiaAdapter = async (config: AppConfig): Promise<AppInstanc
     });
   }
 
-  // --- Result middleware + response logging ---
-  elysia.onAfterHandle((ctx: ElysiaHandlerCtx & { response: unknown }): unknown => {
-    const response = ctx.response;
-    const { body, status } = processHandlerResult(response);
-    ctx.set.status = status;
-
-    if (loggingEnabled) {
-      const id = requestIds.get(ctx.request) ?? 'unknown';
-      const start = requestTimes.get(ctx.request) ?? Date.now();
-      const level = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info';
-
-      const errorStack = isResult(response) && !isOk(response) ? response.error.stack : undefined;
-
-      logger.http[level](
-        {
-          ...createResponseLog(ctx.request, id, status, start),
-          ...(errorStack !== undefined ? { stack: errorStack } : {}),
-        },
-        'Request completed',
-      );
-    }
-
-    return body;
-  });
+  // --- Shared logging context passed to every wrapHandler ---
+  const logCtx: LogCtx = { logger, requestIds, requestTimes, loggingEnabled };
 
   // --- Swagger ---
   if (config.swagger?.enabled) {
@@ -223,28 +229,28 @@ export const createElysiaAdapter = async (config: AppConfig): Promise<AppInstanc
 
   const adapter: IHttpAdapter = {
     get(path, handler, meta?) {
-      elysia.get(path, wrapHandler(handler), routeOpts(meta));
+      elysia.get(path, wrapHandler(handler, logCtx), routeOpts(meta));
       return this;
     },
     post(path, handler, meta?) {
-      elysia.post(path, wrapHandler(handler), routeOpts(meta));
+      elysia.post(path, wrapHandler(handler, logCtx), routeOpts(meta));
       return this;
     },
     put(path, handler, meta?) {
-      elysia.put(path, wrapHandler(handler), routeOpts(meta));
+      elysia.put(path, wrapHandler(handler, logCtx), routeOpts(meta));
       return this;
     },
     patch(path, handler, meta?) {
-      elysia.patch(path, wrapHandler(handler), routeOpts(meta));
+      elysia.patch(path, wrapHandler(handler, logCtx), routeOpts(meta));
       return this;
     },
     delete(path, handler, meta?) {
-      elysia.delete(path, wrapHandler(handler), routeOpts(meta));
+      elysia.delete(path, wrapHandler(handler, logCtx), routeOpts(meta));
       return this;
     },
     group(prefix, fn) {
       elysia.group(prefix, (grouped) => {
-        fn(makeGroupAdapter(grouped, elysia));
+        fn(makeGroupAdapter(grouped, elysia, logCtx));
         return grouped;
       });
       return this;
