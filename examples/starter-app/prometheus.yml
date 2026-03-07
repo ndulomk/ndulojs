@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'elysia-app'
+
+scrape_configs:
+  - job_name: 'elysia-api'
+    static_configs:
+      - targets: ['app:9091']
+        labels:
+          service: 'api'
+    scrape_interval: 5s

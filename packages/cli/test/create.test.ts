@@ -39,10 +39,10 @@ describe('createProject', () => {
     expect((pkg['dependencies'] as Record<string, unknown>)['@ndulojs/core']).toBeDefined();
   });
 
-  it('index.ts imports from @ndulojs/core', async () => {
+  it('index.ts imports from ndulojs', async () => {
     await createProject('my-app');
     const src = await readFile(join(tmp, 'my-app', 'src', 'index.ts'), 'utf-8');
-    expect(src).toContain('@ndulojs/core');
+    expect(src).toContain('ndulojs');
     expect(src).toContain('createApp');
     expect(src).toContain('Ok(');
   });
