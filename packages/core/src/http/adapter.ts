@@ -18,9 +18,6 @@ import { isOk } from '../result';
 
 type RouteMeta = Omit<RouteDefinition, 'method' | 'path' | 'handler'>;
 
-/**
- * Logging context passed down to every wrapped handler.
- */
 type LogCtx = {
   logger: LoggerSuite;
   requestIds: WeakMap<Request, string>;
@@ -28,9 +25,6 @@ type LogCtx = {
   loggingEnabled: boolean;
 };
 
-/**
- * Minimal Elysia instance shape we actually use.
- */
 type AnyElysia = {
   get(path: string, handler: unknown, opts?: unknown): AnyElysia;
   post(path: string, handler: unknown, opts?: unknown): AnyElysia;
@@ -44,9 +38,6 @@ type AnyElysia = {
   onRequest(handler: unknown): AnyElysia;
 };
 
-/**
- * Minimal Elysia handler context — only the fields we read.
- */
 type ElysiaHandlerCtx = {
   request: Request;
   params: Record<string, string>;
@@ -55,9 +46,6 @@ type ElysiaHandlerCtx = {
   set: { status?: number | string | undefined; headers: Record<string, string> };
 };
 
-/**
- * Converts Headers to a plain object.
- */
 const headersToObject = (headers: Headers): Record<string, string> => {
   const result: Record<string, string> = {};
   headers.forEach((value, key) => {
@@ -66,30 +54,34 @@ const headersToObject = (headers: Headers): Record<string, string> => {
   return result;
 };
 
-/**
- * Builds Elysia route options from NduloJS RouteMeta.
- */
 const routeOpts = (meta?: RouteMeta): Record<string, unknown> => {
   if (meta === undefined) return {};
-
   const opts: Record<string, unknown> = {};
-
   if (meta.detail !== undefined) opts['detail'] = meta.detail;
   if (meta.body !== undefined) opts['body'] = meta.body;
   if (meta.query !== undefined) opts['query'] = meta.query;
   if (meta.params !== undefined) opts['params'] = meta.params;
-
   return opts;
 };
 
 /**
  * Wraps a NduloJS Handler into an Elysia-callable function.
- * Logging happens here — guaranteed to run for every handler, every time.
+ *
+ * The handler receives an extended RequestContext that includes a mutable
+ * `set` object — allowing handlers to write response headers (e.g. Set-Cookie)
+ * without depending on Elysia's internal cookie proxy.
+ *
+ * After the handler resolves, any headers written to `ctx.set.headers` are
+ * merged back into Elysia's real `ctx.set.headers`, so they appear in the
+ * HTTP response.
  */
 const wrapHandler =
   (handler: Handler, logCtx: LogCtx) =>
   async (ctx: ElysiaHandlerCtx): Promise<unknown> => {
-    const result = await handler({
+    // Provide a local `set` object the handler can write into
+    const localSet: ElysiaHandlerCtx['set'] = { headers: {} };
+
+    const result = await (handler as (ctx: unknown) => unknown)({
       request: ctx.request,
       params: ctx.params,
       query: ctx.query,
@@ -97,10 +89,15 @@ const wrapHandler =
       headers: headersToObject(ctx.request.headers),
       path: new URL(ctx.request.url).pathname,
       method: ctx.request.method as HttpMethod,
+      set: localSet,
     });
 
     const { body, status } = processHandlerResult(result);
     ctx.set.status = status;
+
+    for (const [key, value] of Object.entries(localSet.headers)) {
+      ctx.set.headers[key] = value;
+    }
 
     if (logCtx.loggingEnabled) {
       const id = logCtx.requestIds.get(ctx.request) ?? 'unknown';
@@ -121,9 +118,6 @@ const wrapHandler =
     return body;
   };
 
-/**
- * Builds a scoped IHttpAdapter for grouped routes.
- */
 const makeGroupAdapter = (g: AnyElysia, elysiaRef: AnyElysia, logCtx: LogCtx): IHttpAdapter => {
   const adapter: IHttpAdapter = {
     get(p, h, m?) {
@@ -173,7 +167,6 @@ export const createElysiaAdapter = async (config: AppConfig): Promise<AppInstanc
   const ElysiaClass = elysiaModule.Elysia ?? elysiaModule.default;
   const elysia = new (ElysiaClass as unknown as new () => AnyElysia)();
 
-  // --- Unified logger ---
   const loggerConfig = config.logger ?? {};
   const logger = createLogger(
     loggerConfig.enabled === false
@@ -188,7 +181,6 @@ export const createElysiaAdapter = async (config: AppConfig): Promise<AppInstanc
 
   const loggingEnabled = loggerConfig.enabled !== false;
 
-  // --- Request logging ---
   const requestIds = new WeakMap<Request, string>();
   const requestTimes = new WeakMap<Request, number>();
 
@@ -201,10 +193,8 @@ export const createElysiaAdapter = async (config: AppConfig): Promise<AppInstanc
     });
   }
 
-  // --- Shared logging context passed to every wrapHandler ---
   const logCtx: LogCtx = { logger, requestIds, requestTimes, loggingEnabled };
 
-  // --- Swagger ---
   if (config.swagger?.enabled) {
     const swaggerModule = await import('@elysiajs/swagger');
     const swaggerFn = (swaggerModule.swagger ?? swaggerModule.default) as (
