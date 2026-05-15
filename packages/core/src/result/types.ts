@@ -1,7 +1,10 @@
+export const ResultTag = Symbol('@ndulojs/result');
+
 /**
  * Represents a successful operation.
  */
 export type Success<T> = {
+  readonly [ResultTag]: true;
   readonly success: true;
   readonly value: T;
 };
@@ -10,6 +13,7 @@ export type Success<T> = {
  * Represents a failed operation.
  */
 export type Failure<E> = {
+  readonly [ResultTag]: true;
   readonly success: false;
   readonly error: E;
 };
@@ -36,12 +40,19 @@ export type Result<T, E = unknown> = Success<T> | Failure<E>;
 export type UnwrapResult<T> = T extends Result<infer U, any> ? U : never;
 
 /**
+ * Runtime check — determines if a value is a Result monad using the Symbol tag.
+ */
+export const isResult = (value: unknown): value is Result<unknown, unknown> =>
+  typeof value === 'object' && value !== null && ResultTag in value;
+
+/**
  * Creates a Success result.
  *
  * @example
  * return Ok(user);
  */
 export const Ok = <T>(value: T): Success<T> => ({
+  [ResultTag]: true,
   success: true,
   value,
 });
@@ -53,6 +64,7 @@ export const Ok = <T>(value: T): Success<T> => ({
  * return Err(ErrorFactory.notFound('User not found'));
  */
 export const Err = <E>(error: E): Failure<E> => ({
+  [ResultTag]: true,
   success: false,
   error,
 });

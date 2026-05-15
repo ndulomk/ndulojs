@@ -14,34 +14,15 @@ import type {
 } from './errors';
 
 /**
- * Captures the stack trace from the caller's location.
- * Filters out internal framework frames so the trace points
- * to where the error actually happened in user code.
- */
-const captureStack = (): string | undefined => {
-  const stack = new Error().stack;
-  if (!stack) return undefined;
-
-  return stack
-    .split('\n')
-    .filter((line, index) => {
-      if (index === 0) return false;
-      if (line.includes('captureStack')) return false;
-      if (line.includes('createError')) return false;
-      if (line.includes('ErrorFactory')) return false;
-      return true;
-    })
-    .join('\n');
-};
-
-/**
  * Internal helper — stamps every error with timestamp and stack.
+ * Stack is captured at creation time so it points to the caller's code.
+ * No fragile function-name filtering — works even when minified.
  */
 const createError = <T extends AppError>(data: Omit<T, 'timestamp' | 'stack'>): T =>
   ({
     ...data,
     timestamp: new Date().toISOString(),
-    stack: captureStack(),
+    stack: new Error().stack,
   }) as T;
 
 /**

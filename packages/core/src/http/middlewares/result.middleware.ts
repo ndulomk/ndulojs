@@ -1,16 +1,8 @@
 import type { AppError } from '../../result/errors';
 import { isOk } from '../../result/utils';
-import type { Result } from '../../result';
+import { isResult } from '../../result/types';
 
-/**
- * Checks if a value is a Result monad.
- */
-export const isResult = (value: unknown): value is Result<unknown, AppError> =>
-  typeof value === 'object' &&
-  value !== null &&
-  'success' in value &&
-  (typeof (value as Record<string, unknown>)['value'] !== 'undefined' ||
-    typeof (value as Record<string, unknown>)['error'] !== 'undefined');
+export { isResult };
 
 /**
  * Maps an AppError type to an HTTP status code.
@@ -87,7 +79,7 @@ export const processHandlerResult = (value: unknown): { body: unknown; status: n
     };
   }
 
-  const error = value.error;
+  const error = value.error as AppError;
   return {
     body: formatErrorResponse(error),
     status: errorToStatus(error),
