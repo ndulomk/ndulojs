@@ -4,9 +4,15 @@ import type {
   Handler,
   HttpMethod,
   IHttpAdapter,
+  Middleware,
+  RequestContext,
   RouteDefinition,
 } from './types';
-import { isResult, processHandlerResult } from './middlewares/result.middleware';
+import {
+  processHandlerResult,
+  isResult,
+  formatErrorResponse,
+} from './middlewares/result.middleware';
 import { createLogger } from '../logger/index';
 import type { LoggerSuite } from '../logger/types';
 import {
@@ -15,6 +21,8 @@ import {
   generateRequestId,
 } from './middlewares/logger.middleware';
 import { isOk } from '../result';
+import type { AppError } from '../result/errors';
+import { createPluginManager } from '../plugin';
 
 type RouteMeta = Omit<RouteDefinition, 'method' | 'path' | 'handler'>;
 
@@ -23,6 +31,7 @@ type LogCtx = {
   requestIds: WeakMap<Request, string>;
   requestTimes: WeakMap<Request, number>;
   loggingEnabled: boolean;
+  excludePaths: Set<string>;
 };
 
 type AnyElysia = {
@@ -64,102 +73,201 @@ const routeOpts = (meta?: RouteMeta): Record<string, unknown> => {
   return opts;
 };
 
-/**
- * Wraps a NduloJS Handler into an Elysia-callable function.
- *
- * The handler receives an extended RequestContext that includes a mutable
- * `set` object — allowing handlers to write response headers (e.g. Set-Cookie)
- * without depending on Elysia's internal cookie proxy.
- *
- * After the handler resolves, any headers written to `ctx.set.headers` are
- * merged back into Elysia's real `ctx.set.headers`, so they appear in the
- * HTTP response.
- */
+const buildRequestContext = (ctx: ElysiaHandlerCtx): RequestContext => ({
+  request: ctx.request,
+  params: ctx.params,
+  query: ctx.query,
+  body: ctx.body,
+  headers: headersToObject(ctx.request.headers),
+  path: new URL(ctx.request.url).pathname,
+  method: ctx.request.method as HttpMethod,
+  set: { headers: {} },
+  state: {},
+});
+
+const mergeResponse = (ndulo: RequestContext, elysiaSet: ElysiaHandlerCtx['set']): void => {
+  if (ndulo.set.status !== undefined) {
+    elysiaSet.status = ndulo.set.status;
+  }
+  for (const [key, value] of Object.entries(ndulo.set.headers)) {
+    elysiaSet.headers[key] = value;
+  }
+};
+
 const wrapHandler =
-  (handler: Handler, logCtx: LogCtx) =>
-  async (ctx: ElysiaHandlerCtx): Promise<unknown> => {
-    // Provide a local `set` object the handler can write into
-    const localSet: ElysiaHandlerCtx['set'] = { headers: {} };
+  (handler: Handler, middlewares: Middleware[], logCtx: LogCtx) =>
+  async (elysiaCtx: ElysiaHandlerCtx): Promise<unknown> => {
+    const nduloCtx = buildRequestContext(elysiaCtx);
 
-    const result = await (handler as (ctx: unknown) => unknown)({
-      request: ctx.request,
-      params: ctx.params,
-      query: ctx.query,
-      body: ctx.body,
-      headers: headersToObject(ctx.request.headers),
-      path: new URL(ctx.request.url).pathname,
-      method: ctx.request.method as HttpMethod,
-      set: localSet,
-    });
+    try {
+      if (middlewares.length > 0) {
+        let mwIndex = 0;
+        let calledNext = false;
+        let body: unknown;
 
-    const { body, status } = processHandlerResult(result);
-    ctx.set.status = status;
+        const next = async (): Promise<void> => {
+          calledNext = true;
+          mwIndex++;
+          const mw = middlewares[mwIndex];
+          if (mw) {
+            await mw(nduloCtx, next);
+          } else {
+            body = await runHandler(handler, nduloCtx, elysiaCtx, logCtx);
+          }
+        };
 
-    for (const [key, value] of Object.entries(localSet.headers)) {
-      ctx.set.headers[key] = value;
+        const firstMw = middlewares[0];
+        if (!firstMw) {
+          return await runHandler(handler, nduloCtx, elysiaCtx, logCtx);
+        }
+        const mwResult = await firstMw(nduloCtx, next);
+        if (mwResult instanceof Response) return mwResult;
+        if (!calledNext) return;
+        return body;
+      }
+
+      return await runHandler(handler, nduloCtx, elysiaCtx, logCtx);
+    } catch (err) {
+      return handleUncaughtError(err, nduloCtx, elysiaCtx, logCtx);
     }
-
-    if (logCtx.loggingEnabled) {
-      const id = logCtx.requestIds.get(ctx.request) ?? 'unknown';
-      const start = logCtx.requestTimes.get(ctx.request) ?? Date.now();
-      const level = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info';
-      const errorStack =
-        isResult(result) && !isOk(result) ? (result.error as { stack?: string }).stack : undefined;
-
-      logCtx.logger.http[level](
-        {
-          ...createResponseLog(ctx.request, id, status, start),
-          ...(errorStack !== undefined ? { stack: errorStack } : {}),
-        },
-        'Request completed',
-      );
-    }
-
-    return body;
   };
 
-const makeGroupAdapter = (g: AnyElysia, elysiaRef: AnyElysia, logCtx: LogCtx): IHttpAdapter => {
-  const adapter: IHttpAdapter = {
+const runHandler = async (
+  handler: Handler,
+  nduloCtx: RequestContext,
+  elysiaCtx: ElysiaHandlerCtx,
+  logCtx: LogCtx,
+): Promise<unknown> => {
+  const result = await handler(nduloCtx);
+  const { body, status } = processHandlerResult(result);
+  elysiaCtx.set.status = status;
+  mergeResponse(nduloCtx, elysiaCtx.set);
+
+  if (logCtx.loggingEnabled && !logCtx.excludePaths.has(nduloCtx.path)) {
+    const id = logCtx.requestIds.get(nduloCtx.request) ?? 'unknown';
+    const start = logCtx.requestTimes.get(nduloCtx.request) ?? Date.now();
+    const level = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info';
+    const errorStack =
+      isResult(result) && !isOk(result) ? (result.error as { stack?: string }).stack : undefined;
+
+    logCtx.logger.http[level](
+      {
+        ...createResponseLog(nduloCtx.request, id, status, start),
+        ...(errorStack !== undefined ? { stack: errorStack } : {}),
+      },
+      'Request completed',
+    );
+  }
+
+  return body;
+};
+
+const handleUncaughtError = (
+  err: unknown,
+  nduloCtx: RequestContext,
+  elysiaCtx: ElysiaHandlerCtx,
+  logCtx: LogCtx,
+): unknown => {
+  const message = err instanceof Error ? err.message : 'Internal server error';
+  const errorBody = formatErrorResponse({
+    type: 'INTERNAL_SERVER_ERROR',
+    message,
+    statusCode: 500,
+    timestamp: new Date().toISOString(),
+    name: 'InternalServerError',
+  } as AppError);
+
+  elysiaCtx.set.status = 500;
+
+  if (logCtx.loggingEnabled) {
+    logCtx.logger.error.error(
+      {
+        err: err instanceof Error ? err.message : String(err),
+        path: nduloCtx.path,
+        method: nduloCtx.method,
+      },
+      'Unhandled error in handler',
+    );
+  }
+
+  return errorBody;
+};
+
+const routeMethods = ['get', 'post', 'put', 'patch', 'delete'] as const;
+type RouteMethod = (typeof routeMethods)[number];
+
+const createAdapter = (
+  target: AnyElysia,
+  elysiaRef: AnyElysia,
+  logCtx: LogCtx,
+  middlewares: Middleware[],
+  isRoot: boolean,
+  startHooks: Array<() => Promise<void> | void>,
+  stopHooks: Array<() => Promise<void> | void>,
+): IHttpAdapter => {
+  const register = (method: RouteMethod, path: string, handler: Handler, meta?: RouteMeta) => {
+    target[method](path, wrapHandler(handler, middlewares, logCtx), routeOpts(meta));
+  };
+
+  return {
     get(p, h, m?) {
-      g.get(p, wrapHandler(h, logCtx), routeOpts(m));
+      register('get', p, h, m);
       return this;
     },
     post(p, h, m?) {
-      g.post(p, wrapHandler(h, logCtx), routeOpts(m));
+      register('post', p, h, m);
       return this;
     },
     put(p, h, m?) {
-      g.put(p, wrapHandler(h, logCtx), routeOpts(m));
+      register('put', p, h, m);
       return this;
     },
     patch(p, h, m?) {
-      g.patch(p, wrapHandler(h, logCtx), routeOpts(m));
+      register('patch', p, h, m);
       return this;
     },
     delete(p, h, m?) {
-      g.delete(p, wrapHandler(h, logCtx), routeOpts(m));
+      register('delete', p, h, m);
       return this;
     },
     group(prefix, fn) {
-      g.group(prefix, (sub) => {
-        fn(makeGroupAdapter(sub, elysiaRef, logCtx));
+      target.group(prefix, (sub) => {
+        fn(createAdapter(sub, elysiaRef, logCtx, middlewares, false, startHooks, stopHooks));
         return sub;
       });
       return this;
     },
     use(plugin) {
-      g.use(plugin);
+      target.use(plugin);
+      return this;
+    },
+    middleware(fn) {
+      middlewares.push(fn);
       return this;
     },
     getElysia() {
       return elysiaRef;
     },
-    listen() {
-      return;
+    onStart(fn) {
+      startHooks.push(fn);
+      return this;
     },
-    stop: () => Promise.resolve(),
+    onStop(fn) {
+      stopHooks.push(fn);
+      return this;
+    },
+    listen(port) {
+      elysiaRef.listen(port);
+    },
+    stop: isRoot
+      ? async () => {
+          for (const hook of stopHooks) await hook();
+          await elysiaRef.stop();
+        }
+      : async () => {
+          for (const hook of stopHooks) await hook();
+        },
   };
-  return adapter;
 };
 
 export const createElysiaAdapter = async (config: AppConfig): Promise<AppInstance> => {
@@ -180,6 +288,8 @@ export const createElysiaAdapter = async (config: AppConfig): Promise<AppInstanc
   );
 
   const loggingEnabled = loggerConfig.enabled !== false;
+  const excludePaths = new Set<string>();
+  if (!loggingEnabled) excludePaths.add('*');
 
   const requestIds = new WeakMap<Request, string>();
   const requestTimes = new WeakMap<Request, number>();
@@ -193,7 +303,7 @@ export const createElysiaAdapter = async (config: AppConfig): Promise<AppInstanc
     });
   }
 
-  const logCtx: LogCtx = { logger, requestIds, requestTimes, loggingEnabled };
+  const logCtx: LogCtx = { logger, requestIds, requestTimes, loggingEnabled, excludePaths };
 
   if (config.swagger?.enabled) {
     const swaggerModule = await import('@elysiajs/swagger');
@@ -217,50 +327,24 @@ export const createElysiaAdapter = async (config: AppConfig): Promise<AppInstanc
     );
   }
 
-  const adapter: IHttpAdapter = {
-    get(path, handler, meta?) {
-      elysia.get(path, wrapHandler(handler, logCtx), routeOpts(meta));
-      return this;
-    },
-    post(path, handler, meta?) {
-      elysia.post(path, wrapHandler(handler, logCtx), routeOpts(meta));
-      return this;
-    },
-    put(path, handler, meta?) {
-      elysia.put(path, wrapHandler(handler, logCtx), routeOpts(meta));
-      return this;
-    },
-    patch(path, handler, meta?) {
-      elysia.patch(path, wrapHandler(handler, logCtx), routeOpts(meta));
-      return this;
-    },
-    delete(path, handler, meta?) {
-      elysia.delete(path, wrapHandler(handler, logCtx), routeOpts(meta));
-      return this;
-    },
-    group(prefix, fn) {
-      elysia.group(prefix, (grouped) => {
-        fn(makeGroupAdapter(grouped, elysia, logCtx));
-        return grouped;
-      });
-      return this;
-    },
-    use(plugin) {
-      elysia.use(plugin);
-      return this;
-    },
-    getElysia() {
-      return elysia;
-    },
-    listen(port) {
-      elysia.listen(port);
-    },
-    stop: async () => {
-      await elysia.stop();
-    },
-  };
+  const middlewares: Middleware[] = [];
+  const startHooks: Array<() => Promise<void> | void> = [];
+  const stopHooks: Array<() => Promise<void> | void> = [];
 
-  return { app: adapter, logger };
+  const adapter = createAdapter(elysia, elysia, logCtx, middlewares, true, startHooks, stopHooks);
+
+  const plugins = createPluginManager({
+    container: config.container ?? ({} as never),
+    app: adapter,
+    logger,
+  });
+
+  plugins.registerAll();
+  await plugins.bootAll();
+
+  for (const hook of startHooks) await hook();
+
+  return { app: adapter, logger, plugins };
 };
 
 export const createApp = (config: AppConfig): Promise<AppInstance> => createElysiaAdapter(config);

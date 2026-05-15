@@ -1,5 +1,7 @@
+import type { PluginManager } from '../plugin';
 import type { Result } from '../result/types';
 import type { AppError } from '../result/errors';
+import type { Container } from '../container/types';
 
 /**
  * HTTP methods supported by the adapter.
@@ -7,8 +9,19 @@ import type { AppError } from '../result/errors';
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS';
 
 /**
+ * Type-safe response controls — handlers write to this instead of using Elysia internals.
+ */
+export type ResponseControl = {
+  status?: number | undefined;
+  headers: Record<string, string>;
+};
+
+/**
  * A request context passed to every handler.
  * Framework-agnostic — no Elysia types leak here.
+ *
+ * `set` — write status / headers that appear in the HTTP response.
+ * `state` — a mutable bag for middleware to share data with handlers (e.g. `ctx.state.user`).
  */
 export type RequestContext = {
   readonly request: Request;
@@ -18,6 +31,8 @@ export type RequestContext = {
   readonly headers: Record<string, string>;
   readonly path: string;
   readonly method: HttpMethod;
+  readonly set: ResponseControl;
+  readonly state: Record<string, unknown>;
 };
 
 /**
@@ -56,10 +71,16 @@ export type RouteDefinition = {
 };
 
 /**
- * Middleware function — runs before/after handlers.
- * Returns void to continue, or a Response to short-circuit.
+ * Middleware function.
+ * Receives the framework-agnostic context and a `next` callback.
+ * - Call `await next()` to continue to the handler.
+ * - Return a `Response` to short-circuit.
+ * - Modify `ctx.state` to share data with downstream handlers.
  */
-export type Middleware = (ctx: RequestContext) => Promise<void | Response> | void | Response;
+export type Middleware = (
+  ctx: RequestContext,
+  next: () => Promise<void>,
+) => Promise<void | Response> | void | Response;
 
 /**
  * Logger configuration passed to createApp().
@@ -92,6 +113,8 @@ export type AppConfig = {
   readonly port: number;
   readonly logger?: LoggerConfig | undefined;
   readonly swagger?: SwaggerConfig | undefined;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  readonly container?: Container<any> | undefined;
 };
 
 /**
@@ -101,6 +124,7 @@ export type AppInstance = {
   readonly app: IHttpAdapter;
   // eslint-disable-next-line @typescript-eslint/consistent-type-imports
   readonly logger: import('../logger/types.js').LoggerSuite;
+  readonly plugins: PluginManager;
 };
 
 /**
@@ -135,7 +159,10 @@ export interface IHttpAdapter {
   ): this;
   group(prefix: string, fn: (app: this) => void): this;
   use(plugin: unknown): this;
+  middleware(fn: Middleware): this;
   getElysia(): unknown;
+  onStart(fn: () => Promise<void> | void): this;
+  onStop(fn: () => Promise<void> | void): this;
   listen(port: number): void;
   stop(): Promise<void>;
 }
