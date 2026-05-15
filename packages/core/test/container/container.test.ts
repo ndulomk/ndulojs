@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createContainer } from '../../src/container/container';
-import { CircularDependencyError, NotRegisteredError } from '../../src/container/errors';
+import { AlreadyRegisteredError, CircularDependencyError, NotRegisteredError } from '../../src/container/errors';
 
 // --- helpers ---
 
@@ -255,6 +255,7 @@ describe('registerClass (OOP support)', () => {
     const container = createContainer<{ counter: Counter }>().registerClass(
       'counter',
       Counter,
+      undefined,
       'transient',
     );
     const a = container.resolve('counter');
@@ -263,6 +264,26 @@ describe('registerClass (OOP support)', () => {
     a.count = 42;
     expect(b.count).toBe(0);
     expect(a).not.toBe(b);
+  });
+
+  it('injects dependencies via constructor', () => {
+    class Engine {
+      start(): string {
+        return 'vroom';
+      }
+    }
+
+    class Car {
+      constructor(readonly engine: Engine) {}
+    }
+
+    const container = createContainer<{ engine: Engine; car: Car }>()
+      .register('engine', () => new Engine())
+      .registerClass('car', Car, ['engine']);
+
+    const car = container.resolve('car');
+    expect(car).toBeInstanceOf(Car);
+    expect(car.engine.start()).toBe('vroom');
   });
 });
 
@@ -275,6 +296,88 @@ describe('has', () => {
   it('returns false for unregistered tokens', () => {
     const container = createContainer();
     expect(container.has('db')).toBe(false);
+  });
+});
+
+describe('registerInstance', () => {
+  it('registers a pre-built value', () => {
+    const config = { port: 3000 };
+    const container = createContainer<{ config: { port: number } }>().registerInstance(
+      'config',
+      config,
+    );
+
+    expect(container.resolve('config')).toBe(config);
+  });
+});
+
+describe('registerOrOverride', () => {
+  it('overwrites an existing registration', () => {
+    const container = createContainer<{ val: number }>()
+      .register('val', () => 1)
+      .registerOrOverride('val', () => 2);
+
+    expect(container.resolve('val')).toBe(2);
+  });
+
+  it('clears singleton cache on override', () => {
+    const container = createContainer<{ val: number }>()
+      .register('val', () => 1);
+
+    container.resolve('val');
+    container.registerOrOverride('val', () => 2);
+
+    expect(container.resolve('val')).toBe(2);
+  });
+});
+
+describe('AlreadyRegisteredError', () => {
+  it('register throws AlreadyRegisteredError on duplicate token', () => {
+    const container = createContainer<{ a: number }>().register('a', () => 1);
+    expect(() => (container as never).register('a', () => 2)).toThrow(AlreadyRegisteredError);
+  });
+
+  it('registerInstance throws AlreadyRegisteredError on duplicate token', () => {
+    const container = createContainer<{ a: number }>().register('a', () => 1);
+    expect(() => (container as never).registerInstance('a', 2)).toThrow(AlreadyRegisteredError);
+  });
+});
+
+describe('resolveAsync', () => {
+  it('resolves sync factories', async () => {
+    const container = createContainer<{ val: number }>().register('val', () => 42);
+    const result = await container.resolveAsync('val');
+    expect(result).toBe(42);
+  });
+
+  it('resolves async factories', async () => {
+    const container = createContainer<{ val: number }>().register('val', () =>
+      Promise.resolve(42),
+    );
+    const result = await container.resolveAsync('val');
+    expect(result).toBe(42);
+  });
+
+  it('caches async singleton factory results', async () => {
+    let callCount = 0;
+    const container = createContainer<{ val: number }>().register('val', async () => {
+      callCount++;
+      return 42;
+    });
+
+    const a = await container.resolveAsync('val');
+    const b = await container.resolveAsync('val');
+
+    expect(a).toBe(42);
+    expect(b).toBe(a);
+    expect(callCount).toBe(1);
+  });
+
+  it('sync resolve throws for async factories', () => {
+    const container = createContainer<{ val: number }>().register('val', () =>
+      Promise.resolve(42),
+    );
+    expect(() => container.resolve('val')).toThrow('async factory');
   });
 });
 
