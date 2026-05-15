@@ -1,6 +1,6 @@
 import { join } from 'path';
 import pino from 'pino';
-import type { LogChannel, LoggerConfig, LogContext, NduloLogger } from './types';
+import type { LogChannel, LoggerConfig, LogContext, LogLevel, NduloLogger } from './types';
 
 /**
  * Wraps a raw Pino logger into a NduloLogger.
@@ -30,66 +30,65 @@ const wrapPino = (pinoLogger: pino.Logger): NduloLogger => {
 };
 
 /**
- * Builds the pino transport options for a given channel.
- *
- * In pretty mode: logs go to stdout with pino-pretty.
- * In production mode: logs go to a daily-rotated file via pino-roll.
- *   - app  → logs/app/app.log     → rotates to app.YYYY-MM-DD.N.log
- *   - http → logs/http/http.log   → rotates to http.YYYY-MM-DD.N.log
- *   - error → logs/error/error.log → rotates to error.YYYY-MM-DD.N.log
+ * In pretty mode, all channels share ONE underlying pino instance.
+ * The channel is added via pino.child({ channel }), avoiding 3 worker threads.
  */
-const buildTransport = (
-  channel: LogChannel,
-  config: Required<LoggerConfig>,
-): pino.TransportSingleOptions | pino.TransportMultiOptions => {
-  if (config.pretty) {
-    return {
-      target: 'pino-pretty',
-      options: {
-        colorize: true,
-        translateTime: 'SYS:HH:MM:ss',
-        ignore: 'pid,hostname',
-        messageFormat: `[${channel}] {msg}`,
+let sharedPrettyPino: pino.Logger | null = null;
+
+const getSharedPrettyLogger = (level: LogLevel): pino.Logger => {
+  if (!sharedPrettyPino) {
+    sharedPrettyPino = pino({
+      level,
+      timestamp: pino.stdTimeFunctions.isoTime,
+      transport: {
+        target: 'pino-pretty',
+        options: {
+          colorize: true,
+          translateTime: 'SYS:HH:MM:ss',
+          ignore: 'pid,hostname',
+          messageFormat: '[{channel}] {msg}',
+        },
       },
-    };
+    });
   }
-
-  const dir = config.dir ?? 'logs';
-  const filePath = join(dir, channel, channel);
-
-  return {
-    target: 'pino-roll',
-    options: {
-      file: filePath,
-      frequency: 'daily',
-      dateFormat: 'yyyy-MM-dd',
-      mkdir: true,
-      extension: '.log',
-      limit: {
-        count: config.retainDays,
-      },
-    },
-  };
+  return sharedPrettyPino;
 };
 
 /**
- * Creates a logger for a specific channel with the given config.
+ * Creates a logger for a specific channel.
+ *
+ * In pretty mode (dev): all channels share one pino-pretty worker thread.
+ * In production mode: each channel has its own daily-rotated file via pino-roll.
+ *   - app  → logs/app/app.log
+ *   - http → logs/http/http.log
+ *   - error → logs/error/error.log
  */
 export const createChannelLogger = (
   channel: LogChannel,
   config: Required<LoggerConfig>,
 ): NduloLogger => {
-  const transport = buildTransport(channel, config);
-  const options: pino.LoggerOptions = {
-    base: { channel },
-    timestamp: pino.stdTimeFunctions.isoTime,
-  };
+  const level = config.level ?? 'info';
+  const dir = config.dir ?? 'logs';
 
-  if (config.level) {
-    options.level = config.level;
+  if (config.pretty) {
+    return wrapPino(getSharedPrettyLogger(level).child({ channel }));
   }
 
-  const pinoLogger = pino(options, pino.transport(transport));
+  const filePath = join(dir, channel, channel);
+  const pinoLogger = pino(
+    { base: { channel }, timestamp: pino.stdTimeFunctions.isoTime, level },
+    pino.transport({
+      target: 'pino-roll',
+      options: {
+        file: filePath,
+        frequency: 'daily',
+        dateFormat: 'yyyy-MM-dd',
+        mkdir: true,
+        extension: '.log',
+        limit: { count: config.retainDays },
+      },
+    }),
+  );
 
   return wrapPino(pinoLogger);
 };
