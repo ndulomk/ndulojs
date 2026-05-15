@@ -6,12 +6,21 @@ const IRREGULARS: Record<string, string> = {
   sheep: 'sheep',
   fish: 'fish',
   data: 'data',
+  feet: 'foot',
+  teeth: 'tooth',
+  mice: 'mouse',
+  oxen: 'ox',
+  deer: 'deer',
+  species: 'species',
+  crises: 'crisis',
+  analyses: 'analysis',
+  status: 'status',
 };
 
 export const toSingular = (word: string): string => {
   const w = word.toLowerCase();
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  if (w in IRREGULARS) return IRREGULARS[w]!;
+  const irregular = IRREGULARS[w];
+  if (irregular !== undefined) return irregular;
   if (w.endsWith('ies')) return w.slice(0, -3) + 'y';
   if (w.endsWith('ves')) return w.slice(0, -3) + 'fe';
   if (/(?:s|x|z|ch|sh)es$/.test(w)) return w.slice(0, -2);

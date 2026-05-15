@@ -2,13 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  createFile,
-  createFiles,
-  fileExists,
-  dirExists,
-  FileExistsError,
-} from '../src/utils/fs.js';
+import { createFile, createFiles, fileExists, dirExists } from '../src/utils/fs.js';
 
 let tmp: string;
 
@@ -55,10 +49,11 @@ describe('createFile', () => {
     expect(await fileExists(p)).toBe(true);
   });
 
-  it('throws FileExistsError if file exists and overwrite is false', async () => {
+  it('does not overwrite if overwrite is false', async () => {
     const p = join(tmp, 'exists.ts');
     await createFile(p, 'v1');
-    await expect(createFile(p, 'v2', false)).rejects.toBeInstanceOf(FileExistsError);
+    await createFile(p, 'v2', false);
+    expect(await readFile(p, 'utf-8')).toBe('v1');
   });
 
   it('overwrites if overwrite is true', async () => {
@@ -80,28 +75,25 @@ describe('createFiles', () => {
     expect(await fileExists(files[1]!.path)).toBe(true);
   });
 
-  it('throws FileExistsError if any file exists and overwrite is false', async () => {
+  it('does not overwrite existing files when overwrite is false', async () => {
     const p = join(tmp, 'a.ts');
     await createFile(p, 'v1');
-    await expect(createFiles([{ path: p, content: 'v2' }], false)).rejects.toBeInstanceOf(
-      FileExistsError,
-    );
+    await createFiles([{ path: p, content: 'v2' }], false);
+    expect(await readFile(p, 'utf-8')).toBe('v1');
   });
 
-  it('does not create any file if one would fail (pre-check)', async () => {
+  it('does not create new files if an existing file is found (pre-check)', async () => {
     const existing = join(tmp, 'exists.ts');
     const newFile = join(tmp, 'new.ts');
     await createFile(existing, 'v1');
 
-    await expect(
-      createFiles(
-        [
-          { path: newFile, content: 'x' },
-          { path: existing, content: 'y' },
-        ],
-        false,
-      ),
-    ).rejects.toBeInstanceOf(FileExistsError);
+    await createFiles(
+      [
+        { path: newFile, content: 'x' },
+        { path: existing, content: 'y' },
+      ],
+      false,
+    );
 
     expect(await fileExists(newFile)).toBe(false);
   });

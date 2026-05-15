@@ -28,7 +28,7 @@ const pick = (type: FileType, n: ModuleNames): GeneratedFile =>
 export const addFile = async (type: string, moduleName: string): Promise<void> => {
   if (!FILE_TYPES.includes(type as FileType)) {
     log.error(`Unknown type "${type}". Valid: ${FILE_TYPES.join(', ')}`);
-    process.exit(1);
+    return;
   }
 
   const n = deriveNames(moduleName);
@@ -36,17 +36,14 @@ export const addFile = async (type: string, moduleName: string): Promise<void> =
 
   if (!modules.includes(n.kebabPlural)) {
     log.error(`Module "${n.kebabPlural}" not found in src/modules/`);
-    process.exit(1);
+    return;
   }
 
   const file = pick(type as FileType, n);
 
   if (await fileExists(file.path)) {
     const ok = await confirm(`"${file.path}" already exists. Overwrite?`);
-    if (!ok) {
-      log.info('Cancelled.');
-      process.exit(0);
-    }
+    if (!ok) return;
   }
 
   await createFile(file.path, file.content, true);

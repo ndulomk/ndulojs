@@ -19,7 +19,7 @@ export const createFile = async (
   overwrite = false,
 ): Promise<void> => {
   if (!overwrite && (await fileExists(filePath))) {
-    throw new FileExistsError(filePath);
+    return;
   }
   await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, content, 'utf-8');
@@ -31,10 +31,13 @@ export const createFiles = async (
 ): Promise<void> => {
   if (!overwrite) {
     for (const f of files) {
-      if (await fileExists(f.path)) throw new FileExistsError(f.path);
+      if (await fileExists(f.path)) return;
     }
   }
-  await Promise.all(files.map((f) => createFile(f.path, f.content, true)));
+  for (const f of files) {
+    await mkdir(dirname(f.path), { recursive: true });
+  }
+  await Promise.all(files.map((f) => writeFile(f.path, f.content, 'utf-8')));
 };
 
 export const listModules = async (cwd = process.cwd()): Promise<string[]> => {
@@ -47,10 +50,3 @@ export const listModules = async (cwd = process.cwd()): Promise<string[]> => {
     return [];
   }
 };
-
-export class FileExistsError extends Error {
-  constructor(public readonly path: string) {
-    super(`File already exists: ${path}`);
-    this.name = 'FileExistsError';
-  }
-}

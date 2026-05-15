@@ -3,6 +3,13 @@ import { createFiles, dirExists } from '../utils/fs.js';
 import { moduleFiles, submoduleFiles } from '../templates/module.js';
 import { confirm, log } from '../utils/prompt.js';
 
+export class CancelError extends Error {
+  constructor() {
+    super('Operation cancelled by user');
+    this.name = 'CancelError';
+  }
+}
+
 export const generateModule = async (name: string, sub?: string): Promise<void> => {
   const n = deriveNames(name);
   const files = sub ? submoduleFiles(deriveNames(sub), n) : moduleFiles(n);
@@ -11,10 +18,7 @@ export const generateModule = async (name: string, sub?: string): Promise<void> 
 
   if (await dirExists(moduleDir)) {
     const ok = await confirm(`Module "${label}" already exists. Overwrite?`);
-    if (!ok) {
-      log.info('Cancelled.');
-      process.exit(0);
-    }
+    if (!ok) throw new CancelError();
   }
 
   await createFiles(files, true);

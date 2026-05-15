@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { dirExists } from '../utils/fs.js';
 import { log } from '../utils/prompt.js';
 
+const isValidName = (name: string): boolean => /^[a-z][a-z0-9_-]*$/i.test(name) && name.length >= 2;
+
 const packageJson = (name: string): string =>
   JSON.stringify(
     {
@@ -10,7 +12,7 @@ const packageJson = (name: string): string =>
       version: '0.1.0',
       type: 'module',
       scripts: { dev: 'bun --watch src/index.ts', start: 'bun src/index.ts', test: 'vitest' },
-      dependencies: { '@ndulojs/core': 'latest', elysia: 'latest', zod: 'latest' },
+      dependencies: { ndulojs: 'latest', elysia: 'latest', zod: 'latest' },
       devDependencies: { '@types/bun': 'latest', typescript: 'latest', vitest: 'latest' },
     },
     null,
@@ -45,11 +47,16 @@ app.listen(Number(process.env['PORT']) || 3000);
 `;
 
 export const createProject = async (name: string): Promise<void> => {
+  if (!isValidName(name)) {
+    log.error(`Invalid project name "${name}". Use 2+ chars, letters/digits/hyphens/underscores.`);
+    return;
+  }
+
   const dest = join(process.cwd(), name);
 
   if (await dirExists(dest)) {
     log.error(`Directory "${name}" already exists.`);
-    process.exit(1);
+    return;
   }
 
   await mkdir(join(dest, 'src', 'modules'), { recursive: true });

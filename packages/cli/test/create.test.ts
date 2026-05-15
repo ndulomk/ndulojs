@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -36,7 +36,7 @@ describe('createProject', () => {
     const raw = await readFile(join(tmp, 'my-app', 'package.json'), 'utf-8');
     const pkg = JSON.parse(raw) as Record<string, unknown>;
     expect(pkg['name']).toBe('my-app');
-    expect((pkg['dependencies'] as Record<string, unknown>)['@ndulojs/core']).toBeDefined();
+    expect((pkg['dependencies'] as Record<string, unknown>)['ndulojs']).toBeDefined();
   });
 
   it('index.ts imports from ndulojs', async () => {
@@ -47,13 +47,22 @@ describe('createProject', () => {
     expect(src).toContain('Ok(');
   });
 
-  it('exits if directory already exists', async () => {
+  it('does not overwrite an existing directory', async () => {
     await createProject('my-app');
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
-      throw new Error('process.exit');
-    }) as never);
+    const pkgPath = join(tmp, 'my-app', 'package.json');
+    const pkg1 = await readFile(pkgPath, 'utf-8');
 
-    await expect(createProject('my-app')).rejects.toThrow('process.exit');
-    exitSpy.mockRestore();
+    await createProject('my-app');
+    const pkg2 = await readFile(pkgPath, 'utf-8');
+
+    expect(pkg1).toEqual(pkg2);
+  });
+
+  it('rejects invalid project names', async () => {
+    await createProject('');
+    expect(await fileExists(join(tmp, '', 'package.json'))).toBe(false);
+
+    await createProject('a');
+    expect(await fileExists(join(tmp, 'a', 'package.json'))).toBe(false);
   });
 });
