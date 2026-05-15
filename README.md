@@ -8,11 +8,13 @@ NduloJS enforces Clean Architecture structurally — dependency injection, expli
 
 ## Features
 
-- **Result pattern** — no try/catch. Errors are typed values: `Result<T, AppError>`
-- **DI container** — functional, type-safe, zero decorators
-- **HTTP adapter** — Elysia under the hood, abstracted behind a clean interface
-- **Structured logger** — three channels (app, http, error) with daily rotation
-- **CLI** — scaffold modules, submodules, and full projects in seconds
+- **Result pattern** — no try/catch. Errors are typed values: `Result<T, AppError>`.
+  `fromThrowable`, `combineAll`, `asyncMap`, `matchError` for any discriminated union.
+- **DI container** — functional, type-safe, zero decorators. Async factories, class injection, singleton/scoped/transient.
+- **Plugin system** — lifecycle hooks (`register`, `boot`, `start`, `stop`), dependency ordering, full access to container + HTTP adapter.
+- **HTTP adapter** — Elysia under the hood. Type-safe response control, middleware chain with `ctx.state`, error boundary, lifecycle hooks.
+- **Structured logger** — three channels (app, http, error). Single worker thread in dev, daily rotation in prod.
+- **CLI** — scaffold modules, submodules, and full projects in seconds. Full CRUD templates, name validation, no `process.exit`.
 
 ---
 
@@ -24,7 +26,7 @@ npx ndulojs create my-app
 cd my-app && bun install && bun dev
 
 # Existing project
-bun add @ndulojs/core
+bun add ndulojs
 ```
 
 ---
@@ -32,26 +34,39 @@ bun add @ndulojs/core
 ## Quick start
 
 ```ts
-import { createApp, createContainer, Ok, Err, ErrorFactory } from '@ndulojs/core';
+import { createApp, Ok } from 'ndulojs';
 
-const app = await createApp({ port: 3000 });
+const { app, logger } = await createApp({ port: 3000 });
 
 app.get('/health', () => Ok({ status: 'ok' }));
 
 app.listen(3000);
+logger.app.info('Server started');
 ```
 
 ---
 
 ## Result pattern
 
-Handlers return `Ok(value)` or `Err(error)`. The framework maps errors to HTTP status codes automatically — no middleware needed.
-
 ```ts
-app.get('/users/:id', async ({ params }) => {
-  const user = await db.findById(params.id);
-  if (!user) return Err(ErrorFactory.notFound('User not found', 'User', params.id));
-  return Ok(user);
+import { Ok, Err, ErrorFactory, fromThrowable, combineAll } from 'ndulojs';
+import type { Result, AppError } from 'ndulojs';
+
+// Wrap throwing code
+const parsed = fromThrowable(() => JSON.parse(raw));
+
+// Chain async operations
+const enriched = await asyncMap(result, (user) => fetchProfile(user.id));
+
+// Collect all errors, not just the first
+const [a, b, c] = await Promise.all([op1(), op2(), op3()]);
+const all = combineAll([a, b, c]);
+
+// Pattern-match on error type — generic for any discriminated union
+matchError(result.error, {
+  NOT_FOUND:        (e) => 404,
+  VALIDATION_ERROR: (e) => 422,
+  default:          (e) => 500,
 });
 ```
 
@@ -67,25 +82,70 @@ app.get('/users/:id', async ({ params }) => {
 | `externalService` | 502 |
 | `tooManyRequests` | 429 |
 
+Every `Result` carries a `Symbol('@ndulojs/result')` tag for reliable runtime checks.
+
 ---
 
 ## Dependency injection
 
 ```ts
-import { createContainer } from '@ndulojs/core';
+import { createContainer } from 'ndulojs';
 
+// Sync factories (default)
 const container = createContainer()
   .register('Config',         ()  => loadConfig())
-  .register('Database',       (c) => createDatabase(c.resolve('Config')))
-  .register('UserRepository', (c) => createUserRepository(c.resolve('Database')))
+  .register('UserRepository', (c) => createUserRepository(c.resolve('Config')))
   .register('UserService',    (c) => createUserService(c.resolve('UserRepository')));
 
-const userService = container.resolve('UserService');
+// Pre-built values
+container.registerInstance('Config', { port: 3000 });
+
+// Async factories
+container.register('Database', async () => {
+  const conn = await createConnection();
+  return conn;
+});
+const db = await container.resolveAsync('Database');
+
+// Class with constructor injection
+class Car { constructor(readonly engine: Engine) {} }
+container
+  .registerClass('engine', Engine)
+  .registerClass('car', Car, ['engine']);
+
+// Duplicate detection — use registerOrOverride to explicitly overwrite
+container.registerOrOverride('Config', () => ({ port: 8080 }));
 ```
 
-- Singleton by default
-- Scoped and transient scopes available
-- Circular dependency detection with a clear error message
+- Singleton by default, scoped and transient available
+- Circular dependency detection
+- Async factories supported via `resolveAsync()`
+
+---
+
+## Plugin system
+
+```ts
+import { createApp } from 'ndulojs';
+import type { Plugin } from 'ndulojs';
+
+const myPlugin: Plugin = {
+  name: 'audit',
+  register(ctx) {
+    ctx.container.register('AuditService', () => createAuditService());
+  },
+  boot(ctx) {
+    ctx.app.get('/audit/logs', async () => ctx.container.resolveAsync('AuditService'));
+  },
+};
+
+const { app, plugins } = await createApp({
+  port: 3000,
+  plugins: [myPlugin],
+});
+
+await plugins.startAll();
+```
 
 ---
 
@@ -95,7 +155,7 @@ const userService = container.resolve('UserService');
 # New project
 npx ndulojs create my-app
 
-# Generate a module
+# Generate a module with full CRUD templates
 ndulo generate module farms
 
 # Generate a submodule
@@ -106,7 +166,7 @@ ndulo add controller farms
 ndulo add service farms
 ```
 
-`generate module` creates the full Clean Architecture structure:
+`generate module` creates the full Clean Architecture structure with typed DTOs, CRUD ports, service delegation, repository stubs, and controller routes:
 
 ```
 src/modules/farms/
@@ -125,37 +185,18 @@ src/modules/farms/
 ## Logger
 
 ```ts
-import { createLogger } from '@ndulojs/core';
+import { createLogger } from 'ndulojs';
 
-const logger = createLogger({ pretty: true }); // dev
+const logger = createLogger({ pretty: true }); // dev — single worker thread
 const logger = createLogger({ dir: 'logs', retainDays: 30 }); // prod
 
 logger.app.info('Server started');
-logger.http.info({ method: 'GET', path: '/users', status: 200 }, 'Request');
-logger.error.error({ err }, 'Unhandled exception');
+logger.http.info({ method: 'GET' }, 'Request');
+logger.error.error({ err }, 'Error');
 
 // Per-request context
 const log = logger.context({ requestId, userId });
 log.app.info('Processing request');
-```
-
----
-
-## Project structure
-
-```
-src/
-├── modules/
-│   └── {module}/
-│       ├── events/
-│       ├── application/
-│       │   ├── dtos/
-│       │   ├── ports/
-│       │   └── services/
-│       └── infrastructure/
-│           ├── persistence/
-│           └── http/controllers/
-└── index.ts
 ```
 
 ---
@@ -165,6 +206,20 @@ src/
 - [Result Pattern](./docs/result.md)
 - [Dependency Injection](./docs/container.md)
 - [CLI Reference](./docs/cli.md)
+
+---
+
+## Examples
+
+- [`examples/organizations/`](./examples/organizations) — Self-contained Organizations CRUD scaffolded by the CLI, with in-memory store and integration tests
+- [`examples/starter-app/`](./examples/starter-app) — Full production template with auth, database, Docker, metrics
+
+```bash
+cd examples/organizations
+bun install
+bun test        # 9 integration tests
+bun start       # http://localhost:3000
+```
 
 ---
 

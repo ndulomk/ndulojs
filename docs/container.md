@@ -5,7 +5,7 @@ NduloJS includes a functional, type-safe DI container. No decorators, no `reflec
 ## Creating a container
 
 ```ts
-import { createContainer } from '@ndulojs/core';
+import { createContainer } from 'ndulojs';
 
 const container = createContainer();
 ```
@@ -22,11 +22,57 @@ const container = createContainer()
 
 The factory receives the container so it can resolve its own dependencies. Chaining is fully type-safe — `resolve()` infers the correct return type for each token.
 
-## Resolving
+## Pre-built values
 
 ```ts
-const userService = container.resolve('UserService');
-// TypeScript knows the exact type — no casting needed
+const config = { port: 3000, db: 'postgres' };
+container.registerInstance('Config', config);
+```
+
+## Registering classes with constructor injection
+
+```ts
+class Engine {
+  start() { return 'vroom'; }
+}
+
+class Car {
+  constructor(readonly engine: Engine) {}
+}
+
+container
+  .registerClass('engine', Engine)
+  .registerClass('car', Car, ['engine']); // injects Engine
+```
+
+Pass an array of token names as the third argument to inject dependencies by constructor.
+
+## Async factories
+
+Factories can return promises. Use `resolveAsync()` instead of `resolve()`:
+
+```ts
+container.register('Database', async () => {
+  const conn = await createConnection();
+  return conn;
+});
+
+const db = await container.resolveAsync('Database');
+```
+
+Sync `resolve()` throws a clear error if the factory is async, preventing silent bugs.
+
+## Duplicate detection
+
+`register()` throws `AlreadyRegisteredError` if a token is already registered. Use `registerOrOverride()` to explicitly overwrite:
+
+```ts
+container.register('Config', () => ({ port: 3000 }));
+container.register('Config', () => ({ port: 8080 }));
+// → AlreadyRegisteredError
+
+container.registerOrOverride('Config', () => ({ port: 8080 }));
+// → OK, previous value replaced
 ```
 
 ## Scopes
@@ -53,14 +99,16 @@ const ctx = scope.resolve('RequestContext'); // fresh instance
 scope.dispose(); // clears scoped cache
 ```
 
-## Class support
+Scopes have their own circular dependency stack — isolated from the parent and other scopes.
+
+## Resolving
 
 ```ts
-class UserService {
-  constructor(private repo: IUserRepository) {}
-}
+// Sync — throws if factory is async
+const service = container.resolve('UserService');
 
-container.registerClass('UserService', UserService);
+// Async — handles both sync and async factories
+const db = await container.resolveAsync('Database');
 ```
 
 ## Circular dependency detection
@@ -90,7 +138,7 @@ Register everything once at the application entry point:
 
 ```ts
 // src/index.ts
-import { createContainer, createApp } from '@ndulojs/core';
+import { createContainer, createApp } from 'ndulojs';
 import { registerUserModule } from './modules/users/user.module.js';
 import { registerFarmModule } from './modules/farms/farm.module.js';
 

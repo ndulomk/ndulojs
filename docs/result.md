@@ -25,8 +25,8 @@ if (!result.success) {
 ## Basic usage
 
 ```ts
-import { Ok, Err, ErrorFactory } from '@ndulojs/core';
-import type { Result, AppError } from '@ndulojs/core';
+import { Ok, Err, ErrorFactory } from 'ndulojs';
+import type { Result, AppError } from 'ndulojs';
 
 const findUser = async (id: string): Promise<Result<User, AppError>> => {
   const user = await db.findById(id);
@@ -83,29 +83,71 @@ A failed `Err(notFound)` becomes:
 ## Utilities
 
 ```ts
-import { map, flatMap, unwrapOr, isOk, isErr, combine, matchError } from '@ndulojs/core';
+import {
+  map, flatMap, unwrapOr, isOk, isErr, combine, matchError,
+  asyncMap, asyncFlatMap, combineAll, fromThrowable, isResult
+} from 'ndulojs';
+```
 
-// Transform a success value
-const name = map(result, user => user.name);
+### Transform
 
-// Chain operations
-const updated = flatMap(result, user => updateUser(user));
+```ts
+const name = map(result, (user) => user.name);
+const upper = await asyncMap(result, (user) => fetchUpperCase(user.name));
+```
 
-// Provide a fallback
+### Chain
+
+```ts
+const updated = flatMap(result, (user) => updateUser(user));
+const enriched = await asyncFlatMap(result, (user) => fetchProfile(user.id));
+```
+
+### Fallback
+
+```ts
 const user = unwrapOr(result, defaultUser);
+```
 
-// Type guards
-if (isOk(result)) { /* result.value is typed */ }
-if (isErr(result)) { /* result.error is typed */ }
+### Type guards
 
-// Combine multiple results
+```ts
+if (isOk(result))   { /* result.value is typed */ }
+if (isErr(result))  { /* result.error is typed */ }
+if (isResult(val))  { /* val is Result<unknown, unknown> */ }
+```
+
+### Combine
+
+```ts
 const all = combine([result1, result2, result3]);
 // Ok([v1, v2, v3]) or Err(firstFailure)
 
-// Pattern match on error type
+const allErrors = combineAll([result1, result2, result3]);
+// Ok([v1, v2, v3]) or Err([e1, e2, e3]) — collects all errors
+```
+
+### Wrap throwing code
+
+```ts
+import { fromThrowable, fromThrowableAsync } from 'ndulojs';
+
+const parsed = fromThrowable(() => JSON.parse(raw));
+const fetched = await fromThrowableAsync(() => fetch(url));
+```
+
+### Pattern match errors
+
+`matchError` is generic — works with any discriminated union that has a `type` field:
+
+```ts
 matchError(result.error, {
   NOT_FOUND:        (e) => reply(404, e),
   VALIDATION_ERROR: (e) => reply(422, e),
   default:          (e) => reply(500, e),
 });
 ```
+
+## Runtime identity
+
+Every `Result` carries a `Symbol('@ndulojs/result')` tag. Use `isResult()` for reliable runtime checks — it does not rely on property names.

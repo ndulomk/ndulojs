@@ -2,7 +2,7 @@
 
 ## Installation
 
-The CLI is included with `@ndulojs/core`. Two commands are available:
+The CLI is included with `ndulojs`. Two commands are available:
 
 - `ndulojs` — project creation
 - `ndulo` — code generation inside a project
@@ -14,8 +14,10 @@ The CLI is included with `@ndulojs/core`. Two commands are available:
 Scaffolds a new project with the full NduloJS structure.
 
 ```bash
-npx ndulojs create <name>
+ndulojs create <name>
 ```
+
+**Name validation:** project names must be 2+ characters and can only contain letters, digits, hyphens, and underscores.
 
 **Generated structure:**
 ```
@@ -67,7 +69,7 @@ src/modules/farms/
 └── farm.module.ts
 ```
 
-The `farm.module.ts` wires the DI immediately — register it in `src/index.ts` and the module is live.
+The generated template includes **full CRUD** — DTOs with typed fields (id, name, timestamps), repository with `findAll`/`findById`/`create`/`update`/`delete`, service layer that delegates to the repository, and a controller with working routes.
 
 **Submodule:**
 ```bash
@@ -125,3 +127,5 @@ If a module or file already exists, the CLI asks before overwriting:
 ```
 Module "farms" already exists. Overwrite? (y/N)
 ```
+
+The CLI no longer uses `process.exit()` — errors and cancellations propagate cleanly, making it fully testable.

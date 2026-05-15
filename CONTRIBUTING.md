@@ -8,29 +8,35 @@ cd ndulojs
 bun install
 ```
 
+## Workspace structure
+
+```
+packages/
+├── core/        — ndulojs framework (Result, DI, HTTP, Logger, Plugin)
+├── cli/         — ndulojs-cli (scaffolding commands)
+
+examples/
+├── organizations/  — CRUD example scaffolded by the CLI
+├── starter-app/    — production template with DB, auth, Docker
+
+docs/            — documentation
+```
+
 ## Running tests
 
 ```bash
-bun test         # run all tests
-bun test --watch # watch mode
+# All packages
+bun test
+
+# Per package
+bun run --filter ndulojs test
+bun run --filter ndulojs-cli test
+
+# Watch mode
+bun run --filter ndulojs test --watch
 ```
 
 All tests must pass before opening a PR.
-
-## Project structure
-
-```
-src/
-├── container/   — DI container
-├── http/        — HTTP adapter + middlewares
-├── logger/      — logger suite
-├── result/      — Result pattern, ErrorFactory, utilities
-└── cli/         — CLI commands and templates
-
-test/            — mirrors src/ structure
-docs/            — documentation
-examples/        — starter app
-```
 
 ## Code conventions
 
@@ -51,20 +57,25 @@ if (!user) return Err(ErrorFactory.notFound('User not found', 'User', id));
 return Ok(user);
 ```
 
-**No comments in generated files.** Templates produce clean code — no inline explanations.
+**No inline comments in shipped code.** Templates must produce clean, self-documenting code.
 
 **Functional over OOP.** Factory functions over classes unless there's a strong reason.
 
+**TypeScript strict mode.** `exactOptionalPropertyTypes` is enabled — handle `undefined` explicitly.
+
 ## Commits
 
-Follow [Conventional Commits](https://www.conventionalcommits.org):
+Follow [Conventional Commits](https://www.conventionalcommits.org). Commit by context:
 
 ```
-feat: add rate limit middleware
-fix: correct singular derivation for -ves words
-docs: add container scoped scope example
-test: add CLI generate submodule tests
-chore: update dependencies
+feat(result): add fromThrowable, combineAll, asyncMap, generic matchError
+feat(container): async factories, registerInstance, class DI, duplicate detection
+feat(plugin): new plugin system with lifecycle hooks
+feat(http): type-safe ResponseControl, middleware chain, error boundary
+perf(logger): share single pino-pretty instance across channels
+fix(cli): resolve @ndulojs/core bug, add name validation, remove process.exit
+docs: update documentation for all new APIs
+feat(examples): add CLI-scaffolded organizations CRUD with tests
 ```
 
 ## Opening a PR
@@ -73,7 +84,8 @@ chore: update dependencies
 2. Make your changes
 3. Add or update tests — coverage must not drop
 4. Run `bun test` — all tests must pass
-5. Open a PR with a clear description of what changed and why
+5. Run `npm run lint` and `npm run typecheck` in both packages
+6. Open a PR with a clear description of what changed and why
 
 ## Reporting issues
 
