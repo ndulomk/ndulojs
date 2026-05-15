@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createContainer } from '../../src/container/container';
-import { AlreadyRegisteredError, CircularDependencyError, NotRegisteredError } from '../../src/container/errors';
+import {
+  AlreadyRegisteredError,
+  CircularDependencyError,
+  NotRegisteredError,
+} from '../../src/container/errors';
 
 // --- helpers ---
 
@@ -321,8 +325,7 @@ describe('registerOrOverride', () => {
   });
 
   it('clears singleton cache on override', () => {
-    const container = createContainer<{ val: number }>()
-      .register('val', () => 1);
+    const container = createContainer<{ val: number }>().register('val', () => 1);
 
     container.resolve('val');
     container.registerOrOverride('val', () => 2);
@@ -334,11 +337,13 @@ describe('registerOrOverride', () => {
 describe('AlreadyRegisteredError', () => {
   it('register throws AlreadyRegisteredError on duplicate token', () => {
     const container = createContainer<{ a: number }>().register('a', () => 1);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return
     expect(() => (container as never).register('a', () => 2)).toThrow(AlreadyRegisteredError);
   });
 
   it('registerInstance throws AlreadyRegisteredError on duplicate token', () => {
     const container = createContainer<{ a: number }>().register('a', () => 1);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return
     expect(() => (container as never).registerInstance('a', 2)).toThrow(AlreadyRegisteredError);
   });
 });
@@ -351,18 +356,16 @@ describe('resolveAsync', () => {
   });
 
   it('resolves async factories', async () => {
-    const container = createContainer<{ val: number }>().register('val', () =>
-      Promise.resolve(42),
-    );
+    const container = createContainer<{ val: number }>().register('val', () => Promise.resolve(42));
     const result = await container.resolveAsync('val');
     expect(result).toBe(42);
   });
 
   it('caches async singleton factory results', async () => {
     let callCount = 0;
-    const container = createContainer<{ val: number }>().register('val', async () => {
+    const container = createContainer<{ val: number }>().register('val', () => {
       callCount++;
-      return 42;
+      return Promise.resolve(42);
     });
 
     const a = await container.resolveAsync('val');
@@ -374,9 +377,7 @@ describe('resolveAsync', () => {
   });
 
   it('sync resolve throws for async factories', () => {
-    const container = createContainer<{ val: number }>().register('val', () =>
-      Promise.resolve(42),
-    );
+    const container = createContainer<{ val: number }>().register('val', () => Promise.resolve(42));
     expect(() => container.resolve('val')).toThrow('async factory');
   });
 });

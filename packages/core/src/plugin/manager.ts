@@ -39,12 +39,12 @@ export const createPluginManager = (ctx: PluginContext): PluginManager => {
   const plugins: Plugin[] = [];
 
   return {
-    use(plugin) {
+    use(plugin: Plugin): PluginManager {
       plugins.push(plugin);
       return this;
     },
 
-    registerAll() {
+    registerAll(): void {
       const sorted = sortByDependencies(plugins);
       for (const plugin of sorted) {
         const result = plugin.register?.(ctx);
@@ -56,14 +56,14 @@ export const createPluginManager = (ctx: PluginContext): PluginManager => {
       }
     },
 
-    async bootAll() {
+    async bootAll(): Promise<void> {
       const sorted = sortByDependencies(plugins);
       for (const plugin of sorted) {
         await plugin.boot?.(ctx);
       }
     },
 
-    async startAll() {
+    async startAll(): Promise<void> {
       const sorted = sortByDependencies(plugins);
       for (const plugin of sorted) {
         await plugin.start?.(ctx);
@@ -71,7 +71,7 @@ export const createPluginManager = (ctx: PluginContext): PluginManager => {
       ctx.logger.app.info('All plugins started');
     },
 
-    async stopAll() {
+    async stopAll(): Promise<void> {
       const sorted = sortByDependencies(plugins).reverse();
       for (const plugin of sorted) {
         await plugin.stop?.(ctx);

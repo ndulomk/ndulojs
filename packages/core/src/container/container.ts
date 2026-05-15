@@ -5,6 +5,7 @@ import type {
   Descriptor,
   Factory,
   RegistryConstraint,
+  ResolverContainer,
   Scope,
   ScopedContainer,
   Token,
@@ -49,9 +50,7 @@ export const createContainer = <
     }
   };
 
-  const resolveAsync = async <K extends keyof TRegistry>(
-    token: K,
-  ): Promise<TRegistry[K]> => {
+  const resolveAsync = async <K extends keyof TRegistry>(token: K): Promise<TRegistry[K]> => {
     const key = token as Token;
 
     const descriptor = descriptors.get(key);
@@ -126,8 +125,9 @@ export const createContainer = <
     return register(
       token,
       deps
-        ? (c) => new constructor(...deps.map((d) => c.resolve(d)))
-        : () => new constructor(),
+        ? (c: ResolverContainer<TRegistry & Record<K, V>>): V =>
+            new constructor(...deps.map((d) => c.resolve(d)))
+        : (): V => new constructor(),
       scope ?? 'singleton',
     ) as unknown as Container<TRegistry & Record<K, V>>;
   };

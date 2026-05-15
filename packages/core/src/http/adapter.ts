@@ -205,66 +205,71 @@ const createAdapter = (
   startHooks: Array<() => Promise<void> | void>,
   stopHooks: Array<() => Promise<void> | void>,
 ): IHttpAdapter => {
-  const register = (method: RouteMethod, path: string, handler: Handler, meta?: RouteMeta) => {
+  const register = (
+    method: RouteMethod,
+    path: string,
+    handler: Handler,
+    meta?: RouteMeta,
+  ): void => {
     target[method](path, wrapHandler(handler, middlewares, logCtx), routeOpts(meta));
   };
 
   return {
-    get(p, h, m?) {
+    get(p: string, h: Handler, m?: RouteMeta): IHttpAdapter {
       register('get', p, h, m);
       return this;
     },
-    post(p, h, m?) {
+    post(p: string, h: Handler, m?: RouteMeta): IHttpAdapter {
       register('post', p, h, m);
       return this;
     },
-    put(p, h, m?) {
+    put(p: string, h: Handler, m?: RouteMeta): IHttpAdapter {
       register('put', p, h, m);
       return this;
     },
-    patch(p, h, m?) {
+    patch(p: string, h: Handler, m?: RouteMeta): IHttpAdapter {
       register('patch', p, h, m);
       return this;
     },
-    delete(p, h, m?) {
+    delete(p: string, h: Handler, m?: RouteMeta): IHttpAdapter {
       register('delete', p, h, m);
       return this;
     },
-    group(prefix, fn) {
+    group(prefix: string, fn: (app: IHttpAdapter) => void): IHttpAdapter {
       target.group(prefix, (sub) => {
         fn(createAdapter(sub, elysiaRef, logCtx, middlewares, false, startHooks, stopHooks));
         return sub;
       });
       return this;
     },
-    use(plugin) {
+    use(plugin: unknown): IHttpAdapter {
       target.use(plugin);
       return this;
     },
-    middleware(fn) {
+    middleware(fn: Middleware): IHttpAdapter {
       middlewares.push(fn);
       return this;
     },
-    getElysia() {
+    getElysia(): unknown {
       return elysiaRef;
     },
-    onStart(fn) {
+    onStart(fn: () => Promise<void> | void): IHttpAdapter {
       startHooks.push(fn);
       return this;
     },
-    onStop(fn) {
+    onStop(fn: () => Promise<void> | void): IHttpAdapter {
       stopHooks.push(fn);
       return this;
     },
-    listen(port) {
+    listen(port: number): void {
       elysiaRef.listen(port);
     },
     stop: isRoot
-      ? async () => {
+      ? async (): Promise<void> => {
           for (const hook of stopHooks) await hook();
           await elysiaRef.stop();
         }
-      : async () => {
+      : async (): Promise<void> => {
           for (const hook of stopHooks) await hook();
         },
   };

@@ -33,10 +33,7 @@ export type Container<TRegistry extends RegistryConstraint> = ResolverContainer<
     scope?: Scope,
   ): Container<TRegistry & Record<K, V>>;
 
-  registerInstance<K extends Token, V>(
-    token: K,
-    instance: V,
-  ): Container<TRegistry & Record<K, V>>;
+  registerInstance<K extends Token, V>(token: K, instance: V): Container<TRegistry & Record<K, V>>;
 
   registerClass<K extends Token, V>(
     token: K,
